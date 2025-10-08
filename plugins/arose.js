@@ -1,79 +1,59 @@
 const axios = require('axios');
-const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 const config = require('../config');
 const { cmd } = require('../command');
 
 cmd({
-    pattern: "remini",
-    alias: ["enhance"],
-    react: "✨",
-    desc: "Enhance image quality using AI",
-    category: "image",
-    use: ".remini <image_url> or reply to image",
+    pattern: "roseday",
+    alias: ["rose", "rosedayquote"],
+    react: "🌹",
+    desc: "Get beautiful Rose Day quotes and messages",
+    category: "fun",
+    use: ".roseday",
     filename: __filename,
 }, 
-async (conn, mek, m, { from, quoted, q, reply }) => {
+async (conn, mek, m, {
+    from, l, quoted, body, isCmd, command, args, q, isGroup, sender, 
+    senderNumber, botNumber2, botNumber, pushname, isMe, isOwner, 
+    groupMetadata, groupName, participants, isItzcp, groupAdmins, 
+    isBotAdmins, isAdmins, reply 
+}) => {
     try {
-        let imageUrl = q;
-
-        // If no URL provided, check for quoted image
-        if (!imageUrl && quoted?.imageMessage) {
-            await reply("⏳ Downloading your image...");
-            
-            const stream = await downloadContentFromMessage(quoted.imageMessage, 'image');
-            let buffer = Buffer.from([]);
-            for await (const chunk of stream) {
-                buffer = Buffer.concat([buffer, chunk]);
-            }
-
-            // Upload image to temporary URL
-            const formData = new FormData();
-            const blob = new Blob([buffer], { type: 'image/jpeg' });
-            formData.append('file', blob, 'image.jpg');
-
-            const uploadResponse = await axios.post('https://tmpfiles.org/api/v1/upload', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
-
-            imageUrl = uploadResponse.data.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
-        }
-
-        if (!imageUrl) {
-            return reply("📸 *Remini AI Enhancement*\n\nSend: .remini <image_url>\nOr reply to image with: .remini\nExample: .remini https://example.com/image.jpg");
-        }
-
-        // Simple URL validation
-        if (imageUrl && !imageUrl.startsWith('http')) {
-            return reply("❌ Please provide a valid URL starting with http:// or https://");
-        }
-
-        await reply("⏳ Enhancing your image... Please wait!");
-
-        const apiUrl = `https://api.princetechn.com/api/tools/remini?apikey=prince_tech_api_azfsbshfb&url=${encodeURIComponent(imageUrl)}`;
+        const response = await axios.get(`https://api.princetechn.com/api/fun/roseday?apikey=prince`);
         
-        const response = await axios.get(apiUrl, { timeout: 30000 });
-
-        if (response.data?.success && response.data.result?.image_url) {
-            const enhancedUrl = response.data.result.image_url;
+        if (response.data && response.data.result) {
+            const rosedayMessage = response.data.result;
             
+            // Send the roseday message with your style
             await conn.sendMessage(from, {
-                image: { url: enhancedUrl },
-                caption: "✨ *Image Enhanced Successfully!*\n\nEnhanced by DARKZONE-MD",
+                text: rosedayMessage,
+                contextInfo: {
+                    mentionedJid: [m.sender],
+                    forwardingScore: 999,
+                    isForwarded: true,
+                    forwardedNewsletterMessageInfo: {
+                        newsletterJid: '120363413041101@newsletter',
+                        newsletterName: "Rose Day Quotes",
+                        serverMessageId: 143,
+                    },
+                },
             }, { quoted: m });
-            
         } else {
-            throw new Error("API returned no image");
+            throw new Error('Invalid API response');
         }
-
-    } catch (error) {
-        console.error('Remini Error:', error.message);
         
-        if (error.response?.status === 429) {
-            reply("⏰ Too many requests. Try again later.");
-        } else if (error.code === 'ECONNABORTED') {
-            reply("⏰ Request timeout. Try again.");
-        } else {
-            reply("❌ Failed to enhance image. Check URL/image and try again.");
+    } catch (error) {
+        console.error('❌ Error in roseday command:', error);
+        
+        let errorMessage = '❌ Failed to get Rose Day quote. Please try again later!';
+        
+        if (error.response?.status === 404) {
+            errorMessage = '❌ Rose Day service is currently unavailable.';
+        } else if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+            errorMessage = '❌ Network error. Please check your connection.';
+        } else if (error.response?.status === 429) {
+            errorMessage = '❌ Rate limit exceeded. Please try again later.';
         }
+        
+        await reply(errorMessage);
     }
 });
