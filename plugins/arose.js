@@ -4,7 +4,7 @@ const { cmd } = require('../command');
 
 cmd({
     pattern: "roseday",
-    alias: ["rose", "rosedayquote"],
+    alias: ["ro", "rosedayquote"],
     react: "🌹",
     desc: "Get beautiful Rose Day quotes and messages",
     category: "fun",
