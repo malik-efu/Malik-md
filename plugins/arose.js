@@ -58,7 +58,7 @@ async (conn, mek, m, { from, quoted, q, reply }) => {
             
             await conn.sendMessage(from, {
                 image: { url: enhancedUrl },
-                caption: "✨ *Image Enhanced Successfully!*\n\nEnhanced by Knight-Bot",
+                caption: "✨ *Image Enhanced Successfully!*\n\nEnhanced by DARKZONE-MD",
             }, { quoted: m });
             
         } else {
