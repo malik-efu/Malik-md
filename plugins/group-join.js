@@ -1,53 +1,81 @@
 const config = require('../config')
 const { cmd, commands } = require('../command')
-const { getBuffer, getGroupAdmins, getRandom, h2k, isUrl, Json, runtime, sleep, fetchJson } = require('../lib/functions')
+const { isUrl } = require('../lib/functions')
 
 cmd({
     pattern: "join",
     react: "📬",
-    alias: ["joinme", "f_join"],
-    desc: "To Join a Group from Invite link",
+    alias: ["joinme", "fjoin"],
+    desc: "Join group using invite link",
     category: "group",
-    use: '.join < Group Link >',
+    use: '.join <whatsapp-group-link>',
     filename: __filename
-}, async (conn, mek, m, { from, l, quoted, body, isCmd, command, args, q, isGroup, sender, senderNumber, botNumber2, botNumber, pushname, isMe, isOwner, groupMetadata, groupName, participants, groupAdmins, isBotAdmins, isCreator, isDev, isAdmins, reply }) => {
+}, async (conn, mek, m, { from, quoted, q, reply, isCreator }) => {
     try {
-        if (!q && !quoted) return reply("*Please provide the Group Link* 🖇️\n\nExample: .join https://chat.whatsapp.com/abc123");
+        // Only bot owner can use this command for security
+        if (!isCreator) {
+            return reply("❌ This command can only be used by bot owner");
+        }
 
-        let groupLink;
+        if (!q && !quoted) {
+            return reply("📝 *Usage:*\n.join <whatsapp-group-link>\nOr reply to a group link with .join");
+        }
 
-        // Extract group invite code from various formats
-        if (quoted && quoted.text && isUrl(quoted.text)) {
-            groupLink = quoted.text.split('https://chat.whatsapp.com/')[1];
-        } else if (q && isUrl(q)) {
-            groupLink = q.split('https://chat.whatsapp.com/')[1];
+        let inviteCode;
+
+        // Extract invite code from different sources
+        if (quoted && quoted.text) {
+            const text = quoted.text;
+            if (text.includes('chat.whatsapp.com/')) {
+                inviteCode = text.split('chat.whatsapp.com/')[1];
+            } else if (text.length === 22) {
+                // Direct invite code
+                inviteCode = text;
+            }
         } else if (q) {
-            // If just the invite code is provided
-            groupLink = q;
+            if (q.includes('chat.whatsapp.com/')) {
+                inviteCode = q.split('chat.whatsapp.com/')[1];
+            } else if (q.length === 22) {
+                // Direct invite code
+                inviteCode = q;
+            }
         }
 
-        if (!groupLink) return reply("❌ *Invalid Group Link*\n\nPlease provide a valid WhatsApp group invite link");
+        if (!inviteCode) {
+            return reply("❌ *Invalid Link Format*\n\nPlease provide a valid WhatsApp group invite link\nExample: https://chat.whatsapp.com/INVITE_CODE");
+        }
 
-        await reply("⏳ Joining group...");
+        // Clean the invite code (remove any extra parameters)
+        inviteCode = inviteCode.split('?')[0].split('/')[0].trim();
 
-        // Accept the group invite
-        await conn.groupAcceptInvite(groupLink.trim());
-        
-        await reply("✅ *Successfully Joined the Group!*");
+        if (inviteCode.length !== 22) {
+            return reply("❌ *Invalid Invite Code*\n\nInvite code should be 22 characters long");
+        }
 
-    } catch (e) {
-        console.log('Join Error:', e);
+        await reply("🔄 *Joining group...*");
+
+        // Use the correct method to join group
+        await conn.groupAcceptInvite(inviteCode);
         
-        let errorMsg = "❌ *Failed to join group*";
+        await reply("✅ *Successfully joined the group!*");
+
+    } catch (error) {
+        console.log('Join Command Error:', error);
         
-        if (e.message.includes('already')) {
-            errorMsg = "❌ *Already in this group*";
-        } else if (e.message.includes('invalid') || e.message.includes('not found')) {
-            errorMsg = "❌ *Invalid or expired group link*";
-        } else if (e.message.includes('limit')) {
-            errorMsg = "❌ *Group join limit reached*";
+        let errorMessage = "❌ *Failed to join group*";
+        
+        if (error.message?.includes('already')) {
+            errorMessage = "❌ *Bot is already in this group*";
+        } else if (error.message?.includes('invalid') || error.message?.includes('not found')) {
+            errorMessage = "❌ *Invalid or expired group link*";
+        } else if (error.message?.includes('limit')) {
+            errorMessage = "❌ *Group join limit reached*";
+        } else if (error.message?.includes('rejected')) {
+            errorMessage = "❌ *Group join request was rejected*";
+        } else if (error.message?.includes('banned')) {
+            errorMessage = "❌ *Bot is banned from this group*";
         }
         
-        reply(errorMsg);
+        reply(errorMessage);
     }
 });
