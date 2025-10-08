@@ -1,85 +1,68 @@
-const { setAntitag, getAntitag, removeAntitag } = require('../lib/index');
 const config = require('../config');
 const { cmd } = require('../command');
 
-// Antitag Command
+// Antitag Command - Simplified and Fixed
 cmd({
     pattern: "antitag",
-    alias: ["antimention", "notag"],
+    alias: ["antimention"],
     react: "🚫",
     desc: "Prevent mass tagging in groups",
     category: "group",
-    use: ".antitag on/off/set delete|kick",
+    use: ".antitag on/off",
     filename: __filename,
 }, 
 async (conn, mek, m, { from, q, isGroup, isAdmins, isBotAdmins, reply }) => {
     try {
+        // Basic checks
         if (!isGroup) return reply("❌ This command only works in groups");
         if (!isAdmins) return reply("❌ Only group admins can use this command");
-        if (!isBotAdmins) return reply("❌ Bot needs to be admin");
+        if (!isBotAdmins) return reply("❌ Bot needs admin role");
 
-        const args = q ? q.toLowerCase().split(' ') : [];
-        const action = args[0];
+        const action = q?.toLowerCase();
 
         if (!action) {
-            return reply(`🚫 *Antitag System*\n\n• .antitag on\n• .antitag set delete\n• .antitag set kick\n• .antitag off\n• .antitag get`);
+            return reply(`🚫 *Antitag System*\n\n.antitag on - Enable protection\n.antitag off - Disable protection`);
         }
 
-        switch (action) {
-            case 'on':
-                await setAntitag(from, 'on', 'delete');
-                await reply("✅ *Antitag Enabled*\nAction: Delete messages");
-                break;
-
-            case 'off':
-                await removeAntitag(from);
-                await reply("✅ *Antitag Disabled*");
-                break;
-
-            case 'set':
-                const setAction = args[1];
-                if (!setAction) return reply("❌ Use: .antitag set delete | kick");
-                if (!['delete', 'kick'].includes(setAction)) return reply("❌ Choose: delete or kick");
-                
-                await setAntitag(from, 'on', setAction);
-                await reply(`✅ *Action set to:* ${setAction}`);
-                break;
-
-            case 'get':
-                const status = await getAntitag(from);
-                if (status) {
-                    await reply(`📊 *Antitag Status*\nEnabled: Yes\nAction: ${status.action || 'delete'}`);
-                } else {
-                    await reply("📊 *Antitag Status*\nEnabled: No");
-                }
-                break;
-
-            default:
-                await reply("❌ Invalid option");
+        // Simple storage in memory (replace with your database later)
+        global.antitag = global.antitag || {};
+        
+        if (action === 'on') {
+            global.antitag[from] = { enabled: true, action: 'delete' };
+            return reply("✅ *Antitag enabled!*\nBot will delete mass tagging messages.");
         }
+        else if (action === 'off') {
+            delete global.antitag[from];
+            return reply("✅ *Antitag disabled*");
+        }
+        else if (action === 'status') {
+            const status = global.antitag[from] ? 'Enabled' : 'Disabled';
+            return reply(`📊 *Antitag Status:* ${status}`);
+        }
+        else {
+            return reply("❌ Use: .antitag on/off");
+        }
+
     } catch (error) {
-        console.error('Antitag Error:', error);
-        reply("❌ Command failed");
+        console.error('Antitag Command Error:', error);
+        return reply("❌ Command failed. Try again.");
     }
 });
 
-// Tag Detection - Add this to your main message handler
+// Simple tag detection handler
 async function handleTagDetection(conn, from, m, sender) {
     try {
         if (!from.endsWith('@g.us')) return;
 
-        const antitag = await getAntitag(from);
-        if (!antitag || !antitag.enabled) return;
+        // Check if antitag is enabled for this group
+        if (!global.antitag || !global.antitag[from]) return;
 
+        // Check for mentions
         const mentions = m.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
-        
+
+        // If 3 or more people are tagged
         if (mentions.length >= 3) {
-            const group = await conn.groupMetadata(from);
-            const threshold = Math.ceil(group.participants.length * 0.5);
-            
-            if (mentions.length >= threshold) {
-                const action = antitag.action || 'delete';
-                
+            try {
                 // Delete the message
                 await conn.sendMessage(from, {
                     delete: {
@@ -90,20 +73,17 @@ async function handleTagDetection(conn, from, m, sender) {
                     }
                 });
 
-                if (action === 'kick') {
-                    await conn.groupParticipantsUpdate(from, [sender], "remove");
-                    await conn.sendMessage(from, {
-                        text: `🚫 User kicked for mass tagging`
-                    });
-                } else {
-                    await conn.sendMessage(from, {
-                        text: `⚠️ Mass tagging detected - message deleted`
-                    });
-                }
+                // Send warning
+                await conn.sendMessage(from, {
+                    text: `⚠️ *Mass Tagging Detected!*\nMessage deleted by antitag system.`
+                });
+
+            } catch (deleteError) {
+                console.log('Delete failed, might not have permission');
             }
         }
     } catch (error) {
-        console.error('Detection Error:', error);
+        console.error('Tag detection error:', error);
     }
 }
 
