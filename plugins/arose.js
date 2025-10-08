@@ -3,7 +3,7 @@ const config = require('../config');
 const { cmd } = require('../command');
 
 cmd({
-    pattern: "roseday",
+    pattern: "rose",
     alias: ["ro", "rosedayquote"],
     react: "🌹",
     desc: "Get beautiful Rose Day quotes and messages",
