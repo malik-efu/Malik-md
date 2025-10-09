@@ -11,33 +11,58 @@ cmd({
     use: ".lyrics <song name>",
     filename: __filename,
 }, 
-async (conn, mek, m, { from, text, q, reply }) => {
+async (conn, mek, m, { from, q, reply }) => {
     try {
-        const songTitle = q || text.split(' ').slice(1).join(' ');
-        
-        if (!songTitle) {
+        if (!q) {
             return reply("🎵 *Lyrics Finder*\n\nUsage: .lyrics <song name>\nExample: .lyrics shape of you");
         }
 
         await reply("🔍 Searching for lyrics...");
 
-        const apiUrl = `https://lyricsapi.fly.dev/api/lyrics?q=${encodeURIComponent(songTitle)}`;
-        const response = await axios.get(apiUrl, { timeout: 15000 });
+        // Try multiple lyrics APIs
+        const apis = [
+            `https://api.lyrics.ovh/v1/${encodeURIComponent(q)}`,
+            `https://some-random-api.com/lyrics?title=${encodeURIComponent(q)}`,
+            `https://lyrist.vercel.app/api/${encodeURIComponent(q)}`
+        ];
 
-        if (!response.data?.result?.lyrics) {
-            return reply(`❌ No lyrics found for "${songTitle}"`);
+        let lyrics = null;
+        let apiError = null;
+
+        for (let apiUrl of apis) {
+            try {
+                const response = await axios.get(apiUrl, { timeout: 10000 });
+                
+                if (apiUrl.includes('lyrics.ovh') && response.data.lyrics) {
+                    lyrics = response.data.lyrics;
+                    break;
+                } else if (apiUrl.includes('some-random-api') && response.data.lyrics) {
+                    lyrics = response.data.lyrics;
+                    break;
+                } else if (apiUrl.includes('lyrist.vercel.app') && response.data.lyrics) {
+                    lyrics = response.data.lyrics;
+                    break;
+                }
+            } catch (error) {
+                apiError = error;
+                continue; // Try next API
+            }
         }
 
-        let lyrics = response.data.result.lyrics;
-        const maxChars = 4000;
+        if (!lyrics) {
+            return reply(`❌ No lyrics found for "${q}"\n\nTry with exact song name like: "Tere Sang Yara"`);
+        }
 
-        // Split lyrics if too long
+        // Format lyrics
+        const maxChars = 3500;
+        let formattedLyrics = lyrics;
+        
         if (lyrics.length > maxChars) {
-            lyrics = lyrics.substring(0, maxChars) + '...\n\n📝 *Lyrics truncated due to length*';
+            formattedLyrics = lyrics.substring(0, maxChars) + '...\n\n📝 *Lyrics truncated*';
         }
 
         await conn.sendMessage(from, {
-            text: `🎵 *Lyrics for: ${songTitle}*\n\n${lyrics}`,
+            text: `🎵 *${q}*\n\n${formattedLyrics}\n\n🎶 *Powered by Knight Bot*`,
             contextInfo: {
                 mentionedJid: [m.sender],
                 forwardingScore: 999,
@@ -53,16 +78,13 @@ async (conn, mek, m, { from, text, q, reply }) => {
     } catch (error) {
         console.error('Lyrics Command Error:', error);
         
-        let errorMessage = `❌ Failed to get lyrics for "${q}"`;
-        
-        if (error.response?.status === 404) {
-            errorMessage = `❌ No lyrics found for "${q}"`;
-        } else if (error.code === 'ECONNREFUSED') {
-            errorMessage = '❌ Lyrics service unavailable. Try again later.';
+        // Better error messages
+        if (error.message?.includes('Network Error') || error.code === 'ENOTFOUND') {
+            reply('❌ Network error. Check your connection.');
         } else if (error.code === 'TIMEOUT') {
-            errorMessage = '❌ Search timeout. Please try again.';
+            reply('❌ Search timeout. Try again.');
+        } else {
+            reply(`❌ No lyrics found for "${q}"\n\nTry: .lyrics "tere sang yara"`);
         }
-        
-        reply(errorMessage);
     }
 });
