@@ -12,22 +12,18 @@ cmd({
   const quoted = message.quoted || message;
   
   try {
-    // TEXT STATUS
-    if (quoted.text && !quoted.message?.imageMessage && !quoted.message?.videoMessage) {
+    // Check if it's text and not media
+    if (quoted.text && quoted.type !== 'image' && quoted.type !== 'video') {
       await client.updateProfileStatus(quoted.text);
       return await message.reply("✅ Text status updated!");
     }
 
-    // MEDIA STATUS
-    if (quoted.message?.imageMessage || quoted.message?.videoMessage || quoted.hasMedia) {
+    // Check if it's media (image or video)
+    if (quoted.type === 'image' || quoted.type === 'video') {
       const media = await quoted.download();
-      const isImage = quoted.message?.imageMessage || quoted.type === 'image';
-      const isVideo = quoted.message?.videoMessage || quoted.type === 'video';
-      
-      const mediaType = isImage ? 'image' : 'video';
-      const mimeType = isImage ? 'image/jpeg' : 'video/mp4';
+      const mediaType = quoted.type;
+      const mimeType = mediaType === 'image' ? 'image/jpeg' : 'video/mp4';
 
-      // TRY MULTIPLE METHODS
       let success = false;
       
       // Method 1: Direct status post
@@ -38,14 +34,18 @@ cmd({
           mimetype: mimeType
         });
         success = true;
-      } catch (e) {}
+      } catch (e) {
+        console.error("Method 1 failed:", e);
+      }
 
       // Method 2: Alternative approach
       if (!success) {
         try {
           await client.setProfilePicture(media);
           success = true;
-        } catch (e) {}
+        } catch (e) {
+          console.error("Method 2 failed:", e);
+        }
       }
 
       if (success) {
