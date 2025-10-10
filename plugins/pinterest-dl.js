@@ -4,7 +4,7 @@ const axios = require('axios');
 cmd({
     pattern: "pindl",
     alias: ["pinterestdl", "pin", "pins", "pindownload"],
-    desc: "Download media from Pinterest",
+    desc: "Download media from Pinterest as Document",
     category: "download",
     filename: __filename
 }, async (conn, mek, m, { args, quoted, from, reply }) => {
@@ -25,13 +25,13 @@ cmd({
         }
 
         const media = response.data.result.media;
-        const description = response.data.result.description || 'No description available'; // Check if description exists
+        const description = response.data.result.description || 'No description available';
         const title = response.data.result.title || 'No title available';
 
         // Select the best video quality or you can choose based on size or type
-        const videoUrl = media.find(item => item.type.includes('720p'))?.download_url || media[0].download_url;
+        const downloadUrl = media.find(item => item.type.includes('720p'))?.download_url || media[0].download_url;
 
-        // Prepare the new message with the updated caption
+        // Prepare the caption
         const desc = `╭━━━〔 *DARKZONE-MD* 〕━━━┈⊷
 ┃▸╭───────────
 ┃▸┃๏ *PINS DOWNLOADER*
@@ -40,22 +40,42 @@ cmd({
 ╭━━❐━⪼
 ┇๏ *Title* - ${title}
 ┇๏ *Media Type* - ${media[0].type}
+┇๏ *Format* - Document
 ╰━━❑━⪼
 > *𝐸𝑅𝐹𝒜𝒩 𝒜𝐻𝑀𝒜𝒟*`;
 
-        // Send the media (video or image) to the user
-        if (videoUrl) {
-            // If it's a video, send the video
-            await conn.sendMessage(from, { video: { url: videoUrl }, caption: desc }, { quoted: mek });
+        // Download the media file
+        const mediaResponse = await axios.get(downloadUrl, { responseType: 'arraybuffer' });
+        const mediaBuffer = Buffer.from(mediaResponse.data);
+
+        // Determine file extension and name
+        let fileName = `pinterest_${Date.now()}`;
+        let mimeType = 'application/octet-stream';
+
+        // Check media type and set appropriate file extension
+        if (media[0].type.includes('video') || downloadUrl.includes('.mp4')) {
+            fileName += '.mp4';
+            mimeType = 'video/mp4';
+        } else if (media[0].type.includes('image') || downloadUrl.includes('.jpg') || downloadUrl.includes('.png')) {
+            fileName += '.jpg';
+            mimeType = 'image/jpeg';
         } else {
-            // If it's an image, send the image
-            const imageUrl = media.find(item => item.type === 'Thumbnail')?.download_url;
-            await conn.sendMessage(from, { image: { url: imageUrl }, caption: desc }, { quoted: mek });
+            fileName += '.bin';
         }
+
+        // Send as DOCUMENT
+        await conn.sendMessage(from, { 
+            document: mediaBuffer, 
+            fileName: fileName,
+            mimetype: mimeType,
+            caption: desc
+        }, { quoted: mek });
+
+        await conn.sendMessage(from, { react: { text: '✅', key: mek.key } });
 
     } catch (e) {
         console.error(e);
         await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
-        reply('❎ An error occurred while processing your request.');
+        reply('❎ An error occurred while processing your request: ' + e.message);
     }
 });
