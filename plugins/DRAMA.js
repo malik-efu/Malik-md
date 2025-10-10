@@ -1,7 +1,7 @@
 const { cmd } = require("../command");
 
 cmd({
-  pattern: "post",
+  pattern: "posta",
   alias: ["status", "story"],
   desc: "Post text, image, or video to WhatsApp status",
   category: "utility",
