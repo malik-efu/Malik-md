@@ -1,91 +1,73 @@
-const config = require('../config');
-const { cmd } = require('../command');
-const yts = require('yt-search');
-const axios = require('axios');
-
-// Izumi API configuration
-const izumi = {
-    baseURL: "https://izumiiiiiiii.dpdns.org"
-};
+const { cmd } = require("../command");
 
 cmd({
-    pattern: "drama",
-    alias: ["dramavideo", "dramamp4"],
-    react: "🎭",
-    desc: "Download drama videos from YouTube",
-    category: "download",
-    use: ".drama <drama name or url>",
-    filename: __filename
-}, async (conn, mek, m, { from, q, reply }) => {
+  pattern: "post",
+  alias: ["status", "story"],
+  desc: "Post text, image, or video to WhatsApp status",
+  category: "utility",
+  filename: __filename
+}, async (client, message, match, { isCreator }) => {
+  if (!isCreator) return await message.reply("*📛 Owner only command*");
+
+  const quoted = message.quoted || message;
+
+  // 1. Handle Text Status
+  if (quoted.text && !quoted.hasMedia) {
     try {
-        if (!q) return reply("❌ What drama video do you want to download?");
+      const text = quoted.text.trim();
+      if (!text) return await message.reply("⚠ Text cannot be empty");
 
-        let videoUrl = '';
-        let videoTitle = '';
-        let videoThumbnail = '';
-        
-        // Determine if input is a YouTube link
-        if (q.startsWith('http://') || q.startsWith('https://')) {
-            videoUrl = q;
-        } else {
-            // Search YouTube for drama videos
-            const searchQuery = q + " drama episode";
-            const { videos } = await yts(searchQuery);
-            if (!videos || videos.length === 0) {
-                return reply("❌ No drama videos found!");
-            }
-            videoUrl = videos[0].url;
-            videoTitle = videos[0].title;
-            videoThumbnail = videos[0].thumbnail;
-        }
+      // WhatsApp status text update
+      await client.sendMessage("status@broadcast", {
+        text: text,
+        backgroundColor: "#000000", // Optional: Customize background color
+        font: 1 // Optional: Font style (1-5)
+      }, { statusJidList: [] }); // Empty list for all contacts
 
-        // Send thumbnail immediately
-        try {
-            const ytId = (videoUrl.match(/(?:youtu\.be\/|v=)([a-zA-Z0-9_-]{11})/) || [])[1];
-            const thumb = videoThumbnail || (ytId ? `https://i.ytimg.com/vi/${ytId}/sddefault.jpg` : undefined);
-            const captionTitle = videoTitle || q;
-            if (thumb) {
-                await conn.sendMessage(from, {
-                    image: { url: thumb },
-                    caption: `*${captionTitle}*\n🎭 Downloading drama video...`
-                }, { quoted: mek });
-            }
-        } catch (e) { 
-            console.error('[DRAMA] thumb error:', e?.message || e); 
-        }
-
-        // Validate YouTube URL
-        let urls = videoUrl.match(/(?:https?:\/\/)?(?:youtu\.be\/|(?:www\.|m\.)?youtube\.com\/(?:watch\?v=|v\/|embed\/|shorts\/|playlist\?list=)?)([a-zA-Z0-9_-]{11})/gi);
-        if (!urls) {
-            return reply("❌ This is not a valid YouTube link!");
-        }
-
-        // Get Izumi API link for video
-        const apiUrl = `${izumi.baseURL}/downloader/youtube?url=${encodeURIComponent(videoUrl)}&format=720`;
-        
-        const res = await axios.get(apiUrl, {
-            timeout: 30000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-        });
-
-        if (!res.data || !res.data.result || !res.data.result.download) {
-            return reply("❌ Failed to get drama video download link.");
-        }
-
-        const videoData = res.data.result;
-
-        // Send drama video
-        await conn.sendMessage(from, {
-            video: { url: videoData.download },
-            mimetype: 'video/mp4',
-            fileName: `${videoData.title || videoTitle || 'drama'}.mp4`,
-            caption: `🎭 *${videoData.title || videoTitle || 'Drama Video'}*\n\n> *_Downloaded by Knight Bot_*`
-        }, { quoted: mek });
-
+      return await message.reply("✅ Text status posted successfully");
     } catch (error) {
-        console.error('[DRAMA] Command Error:', error);
-        reply("❌ Drama download failed: " + (error.message || 'Try again later'));
+      console.error("Text Status Error:", error);
+      return await message.reply(`❌ Failed to post text status: ${error.message}`);
     }
+  }
+
+  // 2. Handle Media Status (Image or Video)
+  if (quoted.hasMedia) {
+    try {
+      const media = await quoted.downloadMedia(); // Use downloadMedia for Baileys
+      if (!media) return await message.reply("⚠ No media found");
+
+      const caption = quoted.caption || "";
+      let messageType;
+
+      // Determine media type
+      if (quoted.type === "imageMessage") {
+        messageType = "image";
+      } else if (quoted.type === "videoMessage") {
+        messageType = "video";
+        // Check video duration (WhatsApp status videos must be ≤ 30 seconds)
+        if (quoted.videoMessage?.seconds > 30) {
+          return await message.reply("⚠ Video duration must be 30 seconds or less");
+        }
+      } else {
+        return await message.reply("⚠ Unsupported media type");
+      }
+
+      // Post media to status
+      await client.sendMessage("status@broadcast", {
+        [messageType]: {
+          url: media.url || media, // Use media URL or buffer
+          mimetype: quoted.mimetype || (messageType === "image" ? "image/jpeg" : "video/mp4")
+        },
+        caption: caption
+      }, { statusJidList: [] }); // Empty list for all contacts
+
+      return await message.reply(`✅ ${messageType.charAt(0).toUpperCase() + messageType.slice(1)} status posted successfully`);
+    } catch (error) {
+      console.error("Media Status Error:", error);
+      return await message.reply(`❌ Failed to post media status: ${error.message}`);
+    }
+  }
+
+  return await message.reply("⚠ Please reply to text, image, or video to post as status");
 });
