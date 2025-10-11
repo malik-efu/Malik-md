@@ -80,32 +80,63 @@ async (conn, mek, m, { from, args, isCreator, reply }) => {
 });
 
 // FIXED: Set Prefix Command
-cmd({ 
-  pattern: "setprefix", 
-  alias: ["prefix"], 
-  desc: "Change bot prefix", 
-  category: "settings", 
-  filename: __filename 
-}, async (conn, mek, m, { from, args, isCreator, reply }) => { 
-    if (!isCreator) return reply("*📛 Only the owner can use this command!*"); 
-    if (!args[0]) return reply("❌ Please provide a new prefix."); 
-    
-    const newPrefix = args[0];
-    if (newPrefix.length > 2) return reply("❌ Prefix must be 1-2 characters long.");
-    
-    config.PREFIX = newPrefix;
-    
-    if (saveConfig()) {
-        await reply(`✅ Prefix changed to: *${newPrefix}*`);
-        await reply("*🔄 Restarting bot to apply changes...*");
-        
-        // Restart bot
-        const { exec } = require("child_process");
-        await sleep(2000);
-        exec("pm2 restart all");
-    } else {
-        return reply("❌ Failed to save prefix configuration.");
-    }
+// SET PREFIX
+cmd({
+  pattern: "setprefix",
+  alias: ["prefix", "prifix"],
+  desc: "Set the bot's command prefix",
+  category: "owner",
+  react: "✅",
+  filename: __filename
+}, async (conn, mek, m, { args, isCreator, reply }) => {
+  if (!isCreator) return reply("❗ Only the bot owner can use this command.");
+  const newPrefix = args[0]?.trim();
+  if (!newPrefix || newPrefix.length > 2) return reply("❌ Provide a valid prefix (1–2 characters).");
+
+  await setConfig("PREFIX", newPrefix);
+
+  await reply(`✅ Prefix updated to: *${newPrefix}*\n\n♻️ Restarting...`);
+  setTimeout(() => exec("pm2 restart all"), 2000);
+});
+
+
+
+// SET BOT NAME
+cmd({
+  pattern: "setbotname",
+  alias: ["botname"],
+  desc: "Set the bot's name",
+  category: "owner",
+  react: "✅",
+  filename: __filename
+}, async (conn, mek, m, { args, isCreator, reply }) => {
+  if (!isCreator) return reply("❗ Only the bot owner can use this command.");
+  const newName = args.join(" ").trim();
+  if (!newName) return reply("❌ Provide a bot name.");
+
+  await setConfig("BOT_NAME", newName);
+
+  await reply(`✅ Bot name updated to: *${newName}*\n\n♻️ Restarting...`);
+  setTimeout(() => exec("pm2 restart all"), 2000);
+});
+
+// SET OWNER NAME
+cmd({
+  pattern: "setownername",
+  alias: ["ownername"],
+  desc: "Set the owner's name",
+  category: "owner",
+  react: "✅",
+  filename: __filename
+}, async (conn, mek, m, { args, isCreator, reply }) => {
+  if (!isCreator) return reply("❗ Only the bot owner can use this command.");
+  const name = args.join(" ").trim();
+  if (!name) return reply("❌ Provide an owner name.");
+
+  await setConfig("OWNER_NAME", name);
+
+  await reply(`✅ Owner name updated to: *${name}*\n\n♻️ Restarting...`);
+  setTimeout(() => exec("pm2 restart all"), 2000);
 });
 
 // FIXED: Mode Command (Private/Public)
