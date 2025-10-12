@@ -6,7 +6,7 @@ const RAPIDAPI_HOST = 'anime-db.p.rapidapi.com';
 
 // Anime Search Command
 cmd({
-  pattern: "anime1",
+  pattern: "anim1",
   alias: ["animesearch"],
   desc: "Search anime information",
   category: "weeb",
