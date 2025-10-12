@@ -1,98 +1,73 @@
 const { cmd } = require("../command");
 const axios = require('axios');
 
+const RAPIDAPI_KEY = 'adb03fd619msh91f2556557237f4p10f659jsn96ca8c5079ee';
+const RAPIDAPI_HOST = 'anime-db.p.rapidapi.com';
+
+// Anime Search Command
 cmd({
-  pattern: "movie",
-  alias: ["film", "cinema", "mov"],
-  desc: "Search movies and send info as document",
-  category: "search",
+  pattern: "anime",
+  alias: ["animesearch"],
+  desc: "Search anime information",
+  category: "weeb",
   filename: __filename
 }, async (client, message, match) => {
+  if (!match) return await message.reply("❌ Please provide anime name\nExample: .anime naruto");
+  
   try {
-    if (!match) {
-      return await message.reply(`🎬 *Movie Search Command*
-
-Usage:
-.movie <movie name>   - Search movie by title
-.movie id <imdb id>   - Search by IMDb ID
-
-Examples:
-.movie avengers
-.movie id tt0848228
-.movie the dark knight`);
-    }
-
-    await message.reply("🔍 Searching for movie...");
-
-    const apiKey = "a22d6b96";
-    let searchUrl;
-
-    // Check if searching by IMDb ID
-    if (match.toLowerCase().startsWith('id ')) {
-      const imdbId = match.substring(3).trim();
-      searchUrl = `https://www.omdbapi.com/?apikey=${apiKey}&i=${imdbId}&plot=full`;
-    } else {
-      // Search by title
-      searchUrl = `https://www.omdbapi.com/?apikey=${apiKey}&t=${encodeURIComponent(match)}&plot=full`;
-    }
-
-    const response = await axios.get(searchUrl);
-    const movie = response.data;
-
-    if (movie.Response === "False") {
-      return await message.reply(`❌ Movie not found!\nSearch: "${match}"\nError: ${movie.Error}\n\n💡 Tip: Try exact movie title or use IMDb ID`);
-    }
-
-    // Create formatted movie info
-    const movieInfo = formatMovieInfo(movie, match);
-    const fileName = `movie_${movie.Title.replace(/[^a-zA-Z0-9]/g, '_')}.txt`;
-    
-    await client.sendMessage(message.from, {
-      document: Buffer.from(movieInfo),
-      fileName: fileName,
-      mimetype: 'text/plain'
+    const response = await axios.get(`https://${RAPIDAPI_HOST}/anime`, {
+      params: { page: 1, size: 3, search: match },
+      headers: { 'x-rapidapi-host': RAPIDAPI_HOST, 'x-rapidapi-key': RAPIDAPI_KEY }
     });
 
+    const animes = response.data.data;
+    if (!animes.length) return await message.reply(`❌ No anime found for "${match}"`);
+
+    for (const anime of animes) {
+      let info = `🎌 *${anime.title}*\n`;
+      info += `📺 Type: ${anime.type || 'N/A'}\n`;
+      info += `📊 Episodes: ${anime.episodes || 'N/A'}\n`;
+      info += `⭐ Rating: ${anime.rating || 'N/A'}\n`;
+      info += `🏆 Rank: ${anime.ranking || 'N/A'}\n`;
+      info += `📖 ${anime.synopsis?.substring(0, 150) || 'No synopsis'}...\n`;
+      
+      await message.reply(info);
+      if (anime.image) {
+        await client.sendMessage(message.from, { 
+          image: { url: anime.image }, 
+          caption: anime.title 
+        });
+      }
+    }
   } catch (error) {
-    console.error('Error:', error.message);
-    await message.reply(`❌ Failed to fetch movie data: ${error.message}`);
+    await message.reply(`❌ Error: ${error.response?.data?.message || error.message}`);
   }
 });
 
-function formatMovieInfo(movie, query) {
-  return `
-🎬 *${movie.Title.toUpperCase()}* (${movie.Year})
+// Top Anime Command
+cmd({
+  pattern: "topanime",
+  alias: ["popularanime"],
+  desc: "Get top popular anime",
+  category: "weeb",
+  filename: __filename
+}, async (client, message, match) => {
+  try {
+    const response = await axios.get(`https://${RAPIDAPI_HOST}/anime`, {
+      params: { page: 1, size: 5, sortBy: 'ranking', sortOrder: 'asc' },
+      headers: { 'x-rapidapi-host': RAPIDAPI_HOST, 'x-rapidapi-key': RAPIDAPI_KEY }
+    });
 
-📊 *Basic Info:*
-• Rated: ${movie.Rated}
-• Released: ${movie.Released}
-• Runtime: ${movie.Runtime}
-• Genre: ${movie.Genre}
+    const animes = response.data.data;
+    let topList = "🏆 *TOP 5 POPULAR ANIME* 🏆\n\n";
+    
+    animes.forEach((anime, index) => {
+      topList += `${index + 1}. *${anime.title}*\n`;
+      topList += `   ⭐ ${anime.rating || 'N/A'} | 📺 ${anime.type || 'N/A'}\n\n`;
+    });
 
-⭐ *Rating:* ${movie.imdbRating}/10 (${movie.imdbVotes} votes)
-🎭 *Type:* ${movie.Type}
-
-👥 *Cast & Crew:*
-• Director: ${movie.Director}
-• Writer: ${movie.Writer}
-• Actors: ${movie.Actors}
-
-📖 *Plot Summary:*
-${movie.Plot}
-
-🌍 *Details:*
-• Language: ${movie.Language}
-• Country: ${movie.Country}
-• Awards: ${movie.Awards}
-
-💰 *Box Office:* ${movie.BoxOffice || 'N/A'}
-🏢 *Production:* ${movie.Production || 'N/A'}
-
-${movie.Ratings && movie.Ratings.length > 0 ? `📈 *Other Ratings:*\n${movie.Ratings.map(r => `   • ${r.Source}: ${r.Value}`).join('\n')}` : ''}
-
-🔗 *IMDb:* https://www.imdb.com/title/${movie.imdbID}
-📝 *Search Query:* "${query}"
-
-*Data provided by OMDB API*
-`.trim();
-}
+    await message.reply(topList);
+  } catch (error) {
+    await message.reply(`❌ Error fetching top anime: ${error.message}`);
+  }
+});
