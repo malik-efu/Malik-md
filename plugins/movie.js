@@ -2,8 +2,8 @@ const { cmd } = require("../command");
 const axios = require('axios');
 
 cmd({
-  pattern: "movie",
-  alias: ["film", "cinem"],
+  pattern: "movi",
+  alias: ["film", "cinema"],
   desc: "Search movies and send info as document",
   category: "search",
   filename: __filename
@@ -17,10 +17,17 @@ cmd({
     await message.reply("🔍 Searching for movie...");
 
     const apiKey = "549abf88fe7a82a3ebc29b10f9842eaf";
-    const searchUrl = `https://api.themoviedb.org/3/search/movie?query=${encodeURIComponent(match)}&api_key=${apiKey}`;
+    const accessToken = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI1NDlhYmY4OGZlN2E4MmEzZWJjMjliMTBmOTg0MmVhZiIsIm5iZiI6MTc2MDI0NDIyNy43ODIsInN1YiI6IjY4ZWIzMjAzMWQyNTNjZTNjODc4NmNjMiIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.Fp2cegnnV3s6XeWHvbVBUJ-MwHa518ZF7RhYkPX4rGA";
+    
+    const headers = {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json;charset=utf-8'
+    };
 
     // Search for movie
-    const searchResponse = await axios.get(searchUrl);
+    const searchUrl = `https://api.themoviedb.org/3/search/movie?query=${encodeURIComponent(match)}&api_key=${apiKey}`;
+    
+    const searchResponse = await axios.get(searchUrl, { headers });
     
     if (!searchResponse.data.results || searchResponse.data.results.length === 0) {
       return await message.reply("❌ Movie not found! Please check the name and try again.");
@@ -32,7 +39,7 @@ cmd({
 
     // Get detailed movie information
     const detailUrl = `https://api.themoviedb.org/3/movie/${movieId}?api_key=${apiKey}&append_to_response=credits`;
-    const detailResponse = await axios.get(detailUrl);
+    const detailResponse = await axios.get(detailUrl, { headers });
     const movieDetails = detailResponse.data;
 
     // Format movie information
@@ -76,15 +83,18 @@ ${movieDetails.overview || 'No description available.'}
 
   } catch (error) {
     console.error('Movie command error:', error);
+    console.error('Error details:', error.response?.data);
     
     if (error.response?.status === 401) {
-      return await message.reply("❌ API Authentication Failed! Check your API key.");
+      return await message.reply("❌ API Authentication Failed! Invalid API key or token.");
     } else if (error.response?.status === 404) {
       return await message.reply("❌ Movie not found! Please try another name.");
     } else if (error.code === 'ENOTFOUND') {
       return await message.reply("❌ Network error! Please check your internet connection.");
+    } else if (error.response?.status === 429) {
+      return await message.reply("❌ API rate limit exceeded! Please try again later.");
     } else {
-      return await message.reply("❌ Error fetching movie data! Please try again later.");
+      return await message.reply(`❌ Error: ${error.message}`);
     }
   }
 });
