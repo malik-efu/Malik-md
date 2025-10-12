@@ -13,34 +13,59 @@ cmd({
       return await message.reply("🎬 Please provide a movie name!\nExample: .movie Avengers");
     }
 
+    // Show searching message
     await message.reply("🔍 Searching for movie...");
 
-    const apiKey = "549abf88fe7a82a3ebc29b10f9842eaf";
-    
-    // SIMPLE API CALL without token
-    const searchUrl = `https://api.themoviedb.org/3/search/movie?api_key=${apiKey}&query=${encodeURIComponent(match)}`;
-    
-    const searchResponse = await axios.get(searchUrl);
-    
-    if (!searchResponse.data.results || searchResponse.data.results.length === 0) {
-      return await message.reply("❌ Movie not found!");
+    // Replace with your OMDB API key
+    const apiKey = "http://www.omdbapi.com/?i=tt3896198&apikey=a22d6b96";
+    const searchUrl = `https://www.omdbapi.com/?apikey=${apiKey}&t=${encodeURIComponent(match)}`;
+
+    // Search for movie
+    const response = await axios.get(searchUrl);
+    const movie = response.data;
+
+    // Check if movie was found
+    if (movie.Response === "False") {
+      return await message.reply(`❌ Movie not found: ${movie.Error}\nPlease check the movie name and try again.`);
     }
 
-    const movie = searchResponse.data.results[0];
-    
-    // Simple movie info
+    // Format movie information
     const movieInfo = `
-🎬 *MOVIE INFORMATION*
+🎬 *MOVIE INFORMATION* 🎬
 
-📝 *Title:* ${movie.title}
-⭐ *Rating:* ${movie.vote_average}/10
-📅 *Release:* ${movie.release_date || 'N/A'}
-📖 *Overview:* ${movie.overview || 'No description'}
+📝 *Title:* ${movie.Title}
+📅 *Year:* ${movie.Year}
+⭐ *IMDb Rating:* ${movie.imdbRating}/10
+🎯 *IMDb Votes:* ${movie.imdbVotes}
 
-🎞️ *TMDB ID:* ${movie.id}
+🎭 *Genre:* ${movie.Genre}
+⏱️ *Runtime:* ${movie.Runtime}
+📅 *Released:* ${movie.Released}
+
+🎬 *Director:* ${movie.Director}
+✍️ *Writer:* ${movie.Writer}
+🎭 *Actors:* ${movie.Actors}
+
+🗣️ *Language:* ${movie.Language}
+🌍 *Country:* ${movie.Country}
+
+🏆 *Awards:* ${movie.Awards}
+
+📖 *Plot:*
+${movie.Plot}
+
+📊 *Ratings:*
+${movie.Ratings ? movie.Ratings.map(rating => `   • ${rating.Source}: ${rating.Value}`).join('\n') : '   No ratings available'}
+
+🎞️ *Type:* ${movie.Type}
+📺 *Box Office:* ${movie.BoxOffice || 'N/A'}
+🎫 *Production:* ${movie.Production || 'N/A'}
+
+🔗 *IMDb ID:* ${movie.imdbID}
     `.trim();
 
-    const fileName = `movie_${movie.title.replace(/[^a-zA-Z0-9]/g, '_')}.txt`;
+    // Create document with movie info
+    const fileName = `movie_${movie.Title.replace(/[^a-zA-Z0-9]/g, '_')}.txt`;
     
     await client.sendMessage(message.from, {
       document: Buffer.from(movieInfo),
@@ -49,7 +74,16 @@ cmd({
     });
 
   } catch (error) {
-    console.error('Error:', error.response?.data || error.message);
-    return await message.reply(`❌ Error: ${error.response?.data?.status_message || error.message}`);
+    console.error('Movie command error:', error);
+    
+    if (error.response?.status === 401) {
+      return await message.reply("❌ Invalid OMDB API Key! Please check your API key.");
+    } else if (error.code === 'ENOTFOUND') {
+      return await message.reply("❌ Network error! Please check your internet connection.");
+    } else if (error.response?.status === 404) {
+      return await message.reply("❌ OMDB API endpoint not found!");
+    } else {
+      return await message.reply("❌ Error fetching movie data! Please try again later.");
+    }
   }
 });
