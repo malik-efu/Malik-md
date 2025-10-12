@@ -8,7 +8,7 @@ const animeConfig = {
 };
 
 cmd({
-    pattern: "anime",
+    pattern: "1anime",
     alias: ["animesearch", "animeinfo"],
     desc: "Search anime information from database",
     category: "weeb",
