@@ -18,20 +18,28 @@ cmd({
         const pp = await conn.profilePictureUrl(from, 'image').catch((_) => 'https://files.catbox.moe/xr2m6u.jpg')
         
         let id = from;
-        const participantesUnicos = Object.values(conn.chats[id]?.messages || {}).map((item) => item.key.participant).filter((value, index, self) => self.indexOf(value) === index)
-        const participantesOrdenados = participantesUnicos
-        .filter(participante => participante)
-        .sort((a, b) => {
-            if (a && b) {
-                return a.split("@")[0].localeCompare(b.split("@")[0])
-            }
-            return 0
-        })
         
-        const listaEnLinea =
-        participantesOrdenados
-        .map((k) => `*●* @${k.split("@")[0]}`)
-        .join("\n") || "ꕥ No hay usuarios en línea en este momento."
+        // Safe access to chat data
+        let participantesUnicos = [];
+        if (conn.chats && conn.chats[id] && conn.chats[id].messages) {
+            participantesUnicos = Object.values(conn.chats[id].messages)
+                .map((item) => item.key?.participant)
+                .filter(participant => participant && typeof participant === 'string')
+                .filter((value, index, self) => self.indexOf(value) === index);
+        }
+
+        const participantesOrdenados = participantesUnicos
+            .filter(participante => participante)
+            .sort((a, b) => {
+                if (a && b) {
+                    return a.split("@")[0].localeCompare(b.split("@")[0])
+                }
+                return 0
+            })
+        
+        const listaEnLinea = participantesOrdenados.length > 0
+            ? participantesOrdenados.map((k) => `*●* @${k.split("@")[0]}`).join("\n")
+            : "ꕥ No hay usuarios en línea en este momento."
 
         await conn.sendMessage(from, { 
             image: { url: pp }, 
@@ -41,6 +49,22 @@ cmd({
 
     } catch (error) {
         console.error('Online List Error:', error);
-        reply(`⚠️ A problem has occurred.\n\n${error.message}`)
+        
+        // Fallback: Show basic group participants
+        try {
+            const groupMetadata = await conn.groupMetadata(from);
+            const participants = groupMetadata.participants || [];
+            
+            const participantList = participants
+                .map(p => `*●* @${p.id.split('@')[0]}`)
+                .join('\n');
+                
+            await conn.sendMessage(from, {
+                text: `*❀ Usuarios del grupo:*\n\n${participantList}\n\n> Total: ${participants.length} usuarios`
+            }, { quoted: m });
+            
+        } catch (fallbackError) {
+            reply(`⚠️ Error showing users. Try again later.`);
+        }
     }
 })
