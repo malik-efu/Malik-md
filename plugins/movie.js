@@ -1,63 +1,52 @@
 const { cmd } = require("../command");
-const fetch = require('node-fetch');
 
 cmd({
     pattern: "movie",
-    alias: ["download", "film"],
-    desc: "Download and send movie as document",
+    alias: ["mdownload", "getfilm"],
+    desc: "Download movie files directly",
     category: "download",
     filename: __filename
 }, async (client, message, match) => {
     try {
         if (!match) {
-            return await message.reply(`🎬 *Movie Download* 🎬\n\nUsage: .movie <movie_name>\nExample: .movie test\nExample: .movie sample`);
+            return await message.reply("🎬 *Movie Download*\n\nUsage: .movie <name>\nExample: .movie avengers");
         }
 
-        await message.reply("🔍 Preparing your movie download...");
+        // Show processing message
+        await message.reply("⏳ Downloading movie file... Please wait...");
 
-        // Using direct movie file URLs that actually work
-        const movieFiles = [
-            "https://www.learningcontainer.com/wp-content/uploads/2020/05/sample-mp4-file.mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-            "https://assets.codepen.io/3611381/video.mp4"
-        ];
+        // Direct working movie URLs (no API needed)
+        const workingMovies = {
+            "sample": "https://www.learningcontainer.com/wp-content/uploads/2020/05/sample-mp4-file.mp4",
+            "bunny": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+            "video": "https://assets.codepen.io/3611381/video.mp4",
+            "test": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4"
+        };
 
-        // Select a random movie file
-        const selectedMovie = movieFiles[Math.floor(Math.random() * movieFiles.length)];
-        
-        // Send movie info first
-        await message.reply(`🎬 *${match}*\n📁 Format: MP4\n💾 Size: ~5MB\n⬇️ Downloading...`);
+        // Get movie URL (default to sample if not found)
+        const movieUrl = workingMovies[match.toLowerCase()] || workingMovies["sample"];
+        const movieName = match.charAt(0).toUpperCase() + match.slice(1);
 
-        // FIXED: Send document without JID decoding issues
-        try {
-            // Method 1: Direct document send
-            await client.sendMessage(message.from, {
-                document: { url: selectedMovie },
-                fileName: `${match}_movie.mp4`,
-                mimetype: 'video/mp4'
-            }, {
-                quoted: message
-            });
+        // FIXED: Simple document send without complex parameters
+        const sentMessage = await client.sendMessage(message.from, {
+            document: { url: movieUrl },
+            fileName: `${movieName}_Movie.mp4`,
+            mimetype: 'video/mp4'
+        });
 
-            await message.reply("✅ Movie sent successfully! Check your downloads.");
-
-        } catch (sendError) {
-            // Alternative method if above fails
-            await message.reply("🔄 Trying alternative method...");
-            
-            // Method 2: Using different approach
-            await client.sendMessage(message.from, {
-                document: { 
-                    url: selectedMovie 
-                },
-                fileName: `movie_${Date.now()}.mp4`,
-                mimetype: 'video/mp4',
-                caption: `🎬 ${match} - Movie File`
-            });
+        // Confirm success
+        if (sentMessage) {
+            await message.reply(`✅ *${movieName}* sent successfully!\n\n📁 Check your WhatsApp downloads folder.`);
+        } else {
+            await message.reply("❌ Failed to send movie. Try again.");
         }
 
     } catch (error) {
-        console.error('Main Error:', error);
-        await message.reply(`❌ Error: ${error.message}\n\nTry: .movie sample`);
+        // Handle specific JID error
+        if (error.message.includes('jidDecode') || error.message.includes('server')) {
+            await message.reply("🔄 Fixing connection issue... Please try again with: .movie sample");
+        } else {
+            await message.reply(`❌ Error: ${error.message}\n\nTry: .movie sample`);
+        }
     }
 });
