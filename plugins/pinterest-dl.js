@@ -1,66 +1,43 @@
-const { cmd } = require('../command');
-const axios = require('axios');
+const { cmd } = require("../command");
 
 cmd({
-    pattern: "pindl",
-    alias: ["pinterestdl", "pin", "pins", "pindownload"],
-    desc: "Download media from Pinterest",
-    category: "download",
+    pattern: "img",
+    alias: ["image"],
+    desc: "Search images",
+    category: "search",
     filename: __filename
-}, async (conn, mek, m, { args, quoted, from, reply }) => {
+}, async (client, message, match) => {
     try {
-        // Make sure the user provided the Pinterest URL
-        if (args.length < 1) {
-            return reply('❎ Please provide the Pinterest URL to download from.');
+        if (!match) return await message.reply("❌ Example: .img cats");
+
+        await message.reply("📸 Sending sample images...");
+
+        // Sample image URLs for testing
+        const sampleImages = {
+            cats: [
+                "https://cdn.pixabay.com/photo/2017/02/20/18/03/cat-2083492_1280.jpg",
+                "https://cdn.pixabay.com/photo/2014/11/30/14/11/cat-551554_1280.jpg"
+            ],
+            dogs: [
+                "https://cdn.pixabay.com/photo/2018/03/31/06/31/dog-3277416_1280.jpg",
+                "https://cdn.pixabay.com/photo/2016/12/13/05/15/puppy-1903313_1280.jpg"
+            ],
+            cars: [
+                "https://cdn.pixabay.com/photo/2012/11/02/13/02/car-63930_1280.jpg",
+                "https://cdn.pixabay.com/photo/2015/05/28/23/12/auto-788747_1280.jpg"
+            ]
+        };
+
+        const images = sampleImages[match.toLowerCase()] || sampleImages.cats;
+        
+        for (let i = 0; i < images.length; i++) {
+            await client.sendMessage(message.jid, {
+                image: { url: images[i] },
+                caption: `📸 ${match} - ${i + 1}`
+            });
         }
 
-        // Extract Pinterest URL from the arguments
-        const pinterestUrl = args[0];
-
-        // Call your Pinterest download API
-        const response = await axios.get(`https://api.giftedtech.web.id/api/download/pinterestdl?apikey=gifted&url=${encodeURIComponent(pinterestUrl)}`);
-
-        if (!response.data.success) {
-            return reply('❎ Failed to fetch data from Pinterest.');
-        }
-
-        const media = response.data.result.media;
-        const description = response.data.result.description || 'No description available'; // Check if description exists
-        const title = response.data.result.title || 'No title available';
-
-        // Select the best video quality or you can choose based on size or type
-        const videoUrl = media.find(item => item.type.includes('720p'))?.download_url || media[0].download_url;
-
-        // Prepare the new message with the updated caption
-        const desc = `╭━━━〔 *DARKZONE-MD* 〕━━━┈⊷
-┃▸╭───────────
-┃▸┃๏ *PINS DOWNLOADER*
-┃▸└───────────···๏
-╰────────────────┈⊷
-╭━━❐━⪼
-┇๏ *Title* - ${title}
-┇๏ *Media Type* - ${media[0].type}
-╰━━❑━⪼
-> *𝐸𝑅𝐹𝒜𝒩 𝒜𝐻𝑀𝒜𝒟*`;
-
-        // Send the media (video or image) to the user
-        if (videoUrl) {
-            // CHANGED: Send as DOCUMENT instead of video
-            await conn.sendMessage(from, { 
-                document: { url: videoUrl }, 
-                fileName: `${title}.mp4`,
-                mimetype: 'video/mp4',
-                caption: desc 
-            }, { quoted: mek });
-        } else {
-            // If it's an image, send the image
-            const imageUrl = media.find(item => item.type === 'Thumbnail')?.download_url;
-            await conn.sendMessage(from, { image: { url: imageUrl }, caption: desc }, { quoted: mek });
-        }
-
-    } catch (e) {
-        console.error(e);
-        await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
-        reply('❎ An error occurred while processing your request.');
+    } catch (error) {
+        await message.reply("❌ Try: .img cats, .img dogs, .img cars");
     }
 });
