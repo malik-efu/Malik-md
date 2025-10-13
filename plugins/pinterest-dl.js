@@ -1,44 +1,33 @@
 const { cmd } = require("../command");
-const fetch = require('node-fetch');
 
 cmd({
     pattern: "pindl",
     alias: ["pinterest"],
-    desc: "Download Pinterest videos for free",
-    category: "download", 
+    desc: "Download Pinterest videos",
+    category: "download",
     filename: __filename
 }, async (client, message, match) => {
     try {
-        if (!match) return await message.reply("❌ Usage: .pindl <pinterest_url>");
+        if (!match) return await message.reply("❌ Give Pinterest URL\nExample: .pindl https://pin.it/example");
 
-        await message.reply("⬇️ Downloading Pinterest video...");
-
-        // Free Pinterest downloader API
-        const apiUrl = `https://api.pinterestdownloader.com/`;
+        await message.reply("📥 Downloading...");
         
-        const formData = new URLSearchParams();
-        formData.append('url', match);
-
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            body: formData,
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            }
-        });
-
+        // Simple direct method - use a working Pinterest downloader
+        const apiUrl = `https://pinterest-downloader.download/api/download?url=${encodeURIComponent(match)}`;
+        
+        const response = await fetch(apiUrl);
         const data = await response.json();
         
-        if (data.download_url) {
+        if (data.url) {
             await client.sendMessage(message.jid, {
-                video: { url: data.download_url },
-                caption: "📌 Pinterest Video Downloaded!"
+                video: { url: data.url },
+                caption: "✅ Pinterest Video Downloaded"
             });
         } else {
-            await message.reply("❌ Could not download this Pinterest video.");
+            await message.reply("❌ No video found");
         }
 
     } catch (error) {
-        await message.reply("❌ Invalid Pinterest URL or download failed.");
+        await message.reply("❌ Use valid Pinterest video URL");
     }
 });
