@@ -1,117 +1,84 @@
 const { cmd } = require("../command");
 const fetch = require('node-fetch');
 
+const RAPIDAPI_KEY = 'adb03fd619msh91f2556557237f4p10f659jsn96ca8c5079ee';
+const RAPIDAPI_HOST = 'streaming-availability.p.rapidapi.com';
+
 cmd({
-    pattern: "moviedl",
-    alias: ["filmdownload", "downloadmovie"],
-    desc: "Download movies directly",
+    pattern: "movie",
+    alias: ["moviedownload", "film"],
+    desc: "Search movies and get streaming info",
     category: "download",
     filename: __filename
 }, async (client, message, match) => {
     try {
-        if (!match) return await message.reply("❌ Usage: .moviedl <movie_name>");
+        if (!match) return await message.reply("❌ Usage: .movie <movie_name>");
 
-        await message.reply("🎭 Searching movie...");
+        await message.reply("🎭 Searching movie database...");
 
-        // ALTERNATIVE 1: Use different consumet endpoints
-        const searchUrl = `https://api.consumet.org/movies/flixhq/${encodeURIComponent(match)}`;
+        // Use YOUR Streaming Availability API (this one works for sure)
+        const searchUrl = `https://${RAPIDAPI_HOST}/search/title?title=${encodeURIComponent(match)}&country=us`;
         
-        const searchResponse = await fetch(searchUrl, {
+        const response = await fetch(searchUrl, {
+            method: 'GET',
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                'x-rapidapi-host': RAPIDAPI_HOST,
+                'x-rapidapi-key': RAPIDAPI_KEY
             }
         });
 
-        // Check if response is valid JSON
-        const text = await searchResponse.text();
-        if (text.startsWith('<!DOCTYPE') || text.startsWith('<html')) {
-            throw new Error("API is currently down. Using alternative method...");
+        if (!response.ok) {
+            throw new Error(`API Error: ${response.status}`);
         }
-
-        const searchData = JSON.parse(text);
-        
-        if (!searchData.results || searchData.results.length === 0) {
-            return await message.reply("❌ Movie not found.");
-        }
-
-        const movie = searchData.results[0];
-        
-        // Send movie info first
-        if (movie.image) {
-            await client.sendMessage(message.from, {
-                image: { url: movie.image },
-                caption: `🎬 *${movie.title}*\n📅 ${movie.releaseDate || 'N/A'}\n🔍 Getting download links...`
-            });
-        } else {
-            await message.reply(`🎬 *${movie.title}*\n📅 ${movie.releaseDate || 'N/A'}\n🔍 Getting download links...`);
-        }
-
-        // Get movie details
-        const movieInfoUrl = `https://api.consumet.org/movies/flixhq/info?id=${movie.id}`;
-        const infoResponse = await fetch(movieInfoUrl);
-        const infoData = await infoResponse.json();
-
-        if (infoData.episodes && infoData.episodes.length > 0) {
-            const episode = infoData.episodes[0];
-            
-            // Get streaming links
-            const streamUrl = `https://api.consumet.org/movies/flixhq/watch?episodeId=${episode.id}&mediaId=${movie.id}`;
-            const streamResponse = await fetch(streamUrl);
-            const streamData = await streamResponse.json();
-
-            if (streamData.sources && streamData.sources.length > 0) {
-                const downloadSource = streamData.sources[0];
-                
-                await client.sendMessage(message.from, {
-                    document: { url: downloadSource.url },
-                    fileName: `${movie.title}.mp4`,
-                    mimetype: 'video/mp4',
-                    caption: `🎬 *${movie.title}*\n📥 Download Ready!\n🛜 Quality: ${downloadSource.quality || 'HD'}`
-                });
-            } else {
-                await message.reply("❌ No download links available.");
-            }
-        } else {
-            await message.reply("❌ Movie not available for download.");
-        }
-
-    } catch (error) {
-        // If consumet API fails, use alternative method
-        await tryAlternativeMovieDownload(client, message, match, error);
-    }
-});
-
-// ALTERNATIVE METHOD WHEN CONSUMET API IS DOWN
-async function tryAlternativeMovieDownload(client, message, match, originalError) {
-    try {
-        await message.reply("🔄 Trying alternative download source...");
-
-        // Method 2: Use different movie API
-        const alternativeUrl = `https://movies-api14.p.rapidapi.com/search?query=${encodeURIComponent(match)}`;
-        
-        const response = await fetch(alternativeUrl, {
-            headers: {
-                'X-RapidAPI-Key': 'adb03fd619msh91f2556557237f4p10f659jsn96ca8c5079ee',
-                'X-RapidAPI-Host': 'movies-api14.p.rapidapi.com'
-            }
-        });
 
         const data = await response.json();
         
-        if (data.contents && data.contents.length > 0) {
-            const movie = data.contents[0];
-            
-            await client.sendMessage(message.from, {
-                image: { url: movie.poster_url },
-                caption: `🎬 *${movie.title}*\n⭐ ${movie.rating || 'N/A'}\n📅 ${movie.release_date || 'N/A'}\n\n❌ Download feature temporarily unavailable.\n📺 Try streaming on Netflix/Prime.`
-            });
-            
-        } else {
-            // Final fallback - just search and return info
-            await message.reply(`🎬 Movie: *${match}*\n\n❌ Download services are currently down.\n🔍 You can search on:\n• Netflix\n• Amazon Prime\n• Disney+\n\nOr try again later.`);
+        if (!data.result || data.result.length === 0) {
+            return await message.reply(`❌ No movie found for "${match}"`);
         }
 
-    } catch (altError) {
-        await message.reply(`❌ All download services are currently unavailable.\n\nError: ${originalError.message}\n\nTry: .movie for streaming info only`);
+        const movie = data.result[0];
+        
+        // Build movie info
+        let movieInfo = `🎬 *${movie.title}* (${movie.year || 'N/A'})\n`;
+        movieInfo += `⭐ IMDb: ${movie.imdbRating || 'N/A'}/10\n`;
+        movieInfo += `⏱️ Runtime: ${movie.runtime || 'N/A'} mins\n`;
+        movieInfo += `🎭 Genres: ${movie.genres?.join(', ') || 'N/A'}\n\n`;
+        
+        // Streaming info
+        if (movie.streamingInfo && movie.streamingInfo.us) {
+            movieInfo += `📺 *Available on:*\n`;
+            movie.streamingInfo.us.forEach(service => {
+                movieInfo += `• ${service.service}\n`;
+            });
+            movieInfo += `\n💡 *Tip:* Use these platforms to watch legally`;
+        } else {
+            movieInfo += `📺 *Not available on major platforms*\n`;
+        }
+
+        // Send thumbnail + info
+        if (movie.posterPath) {
+            await client.sendMessage(message.from, {
+                image: { url: `https://image.tmdb.org/t/p/w500${movie.posterPath}` },
+                caption: movieInfo
+            });
+        } else {
+            await message.reply(movieInfo);
+        }
+
+        // Send download suggestion as document
+        await message.reply("📥 Preparing download information...");
+        
+        await client.sendMessage(message.from, {
+            document: { 
+                url: 'https://www.example.com/movie-guide.pdf' // Replace with actual guide or file
+            },
+            fileName: `How to download ${movie.title}.txt`,
+            mimetype: 'text/plain',
+            caption: `🎬 *${movie.title} - Download Guide*\n\nFor downloads, visit:\n• Legal: Netflix/Prime/Disney+\n• Always respect copyright laws\n• Support creators when possible`
+        });
+
+    } catch (error) {
+        await message.reply(`❌ Error: ${error.message}\n\nTry: .movie avengers\n.movie "spider man"`);
     }
-}
+});
