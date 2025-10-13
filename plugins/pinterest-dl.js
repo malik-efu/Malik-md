@@ -2,7 +2,7 @@ const axios = require('axios');
 const { cmd } = require('../command');
 
 cmd({
-    pattern: "ssweb",
+    pattern: "ssweb1",
     alias: ["ss", "screenshot"],
     react: "🌐",
     desc: "Take website screenshot",
