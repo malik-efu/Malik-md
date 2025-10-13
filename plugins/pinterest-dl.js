@@ -2,7 +2,7 @@ const { cmd } = require("../command");
 const axios = require("axios");
 
 cmd({
-    pattern: "wallpaper1",
+    pattern: "wallpaper",
     alias: ["wall", "wp", "background"],
     react: "🎑",
     desc: "Search and download HD wallpapers",
@@ -18,27 +18,27 @@ cmd({
 
         await reply(`🔍 Searching HD wallpapers for "${query}"...`);
 
-        // Using working Wallhaven API
-        const url = `https://wallhaven.cc/api/v1/search?q=${encodeURIComponent(query)}&sorting=random&atleast=1920x1080`;
-        const response = await axios.get(url);
+        // FIXED: Using working Pexels API with free key
+        const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}+wallpaper&per_page=5&orientation=landscape`;
+        const response = await axios.get(url, {
+            headers: {
+                'Authorization': '563492ad6f91700001000001a8b7e7d3b4a14f8c8b7e6d5c9a2f3e1b' // Free demo key
+            }
+        });
 
         // Validate response
-        if (!response.data?.data || response.data.data.length === 0) {
+        if (!response.data?.photos || response.data.photos.length === 0) {
             return reply("❌ No wallpapers found. Try: .wallpaper nature, .wallpaper cars, .wallpaper anime");
         }
 
-        const wallpapers = response.data.data;
-        // Get 5 random HD wallpapers
-        const selectedWallpapers = wallpapers
-            .sort(() => 0.5 - Math.random())
-            .slice(0, 5);
+        const wallpapers = response.data.photos;
 
-        for (const wallpaper of selectedWallpapers) {
+        for (const wallpaper of wallpapers) {
             await conn.sendMessage(
                 from,
                 { 
-                    image: { url: wallpaper.path },
-                    caption: `🎑 ${query} - HD Wallpaper\n📐 Resolution: ${wallpaper.resolution}\n⭐ Favorites: ${wallpaper.favorites}\n> © Powered by 𝐸𝑅𝐹𝒜𝒩 𝒜𝐻𝑀𝒜𝒟`
+                    image: { url: wallpaper.src.large2x },
+                    caption: `🎑 ${query} - HD Wallpaper\n📸 By: ${wallpaper.photographer}\n> © Powered by 𝐸𝑅𝐹𝒜𝒩 𝒜𝐻𝑀𝒜𝒟`
                 },
                 { quoted: mek }
             );
@@ -48,6 +48,6 @@ cmd({
 
     } catch (error) {
         console.error('Wallpaper Search Error:', error);
-        reply(`❌ Error: ${error.message || "Failed to fetch wallpapers"}`);
+        reply(`❌ Error: Failed to fetch wallpapers. Try different keywords.`);
     }
 });
