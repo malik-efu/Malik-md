@@ -1,47 +1,44 @@
 const { cmd } = require("../command");
-const axios = require('axios');
+const fetch = require('node-fetch');
 
 cmd({
     pattern: "pindl",
-    alias: ["pinterest", "pindownload"],
-    desc: "Download Pinterest videos",
-    category: "download",
+    alias: ["pinterest"],
+    desc: "Download Pinterest videos for free",
+    category: "download", 
     filename: __filename
 }, async (client, message, match) => {
     try {
-        if (!match) {
-            return await message.reply(`📌 *Pinterest Download* 📌\n\nUsage: .pindl <pinterest_url>\nExample: .pindl https://pin.it/example`);
-        }
+        if (!match) return await message.reply("❌ Usage: .pindl <pinterest_url>");
 
-        await message.reply("🔍 Downloading from Pinterest...");
+        await message.reply("⬇️ Downloading Pinterest video...");
 
-        // Extract Pinterest URL
-        const pinUrl = match.startsWith('http') ? match : `https://pin.it/${match}`;
+        // Free Pinterest downloader API
+        const apiUrl = `https://api.pinterestdownloader.com/`;
         
-        // Use Pinterest downloader API
-        const apiUrl = `https://pinterest-video-api.p.rapidapi.com/download?url=${encodeURIComponent(pinUrl)}`;
-        
-        const response = await axios.get(apiUrl, {
+        const formData = new URLSearchParams();
+        formData.append('url', match);
+
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            body: formData,
             headers: {
-                'X-RapidAPI-Key': 'adb03fd619msh91f2556557237f4p10f659jsn96ca8c5079ee',
-                'X-RapidAPI-Host': 'pinterest-video-api.p.rapidapi.com'
+                'Content-Type': 'application/x-www-form-urlencoded'
             }
         });
 
-        if (response.data.url || response.data.video_url) {
-            const videoUrl = response.data.url || response.data.video_url;
-            
-            // Send as video
+        const data = await response.json();
+        
+        if (data.download_url) {
             await client.sendMessage(message.jid, {
-                video: { url: videoUrl },
-                caption: "📌 Pinterest Video Downloaded Successfully!"
+                video: { url: data.download_url },
+                caption: "📌 Pinterest Video Downloaded!"
             });
-            
         } else {
-            await message.reply("❌ No video found in this Pinterest link.");
+            await message.reply("❌ Could not download this Pinterest video.");
         }
 
     } catch (error) {
-        await message.reply("❌ Failed to download. Check if it's a valid Pinterest video URL.");
+        await message.reply("❌ Invalid Pinterest URL or download failed.");
     }
 });
