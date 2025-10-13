@@ -1,127 +1,83 @@
-const axios = require('axios');
-const cheerio = require('cheerio');
-const config = require('../config');
+const path = require("path");
+const { File } = require("megajs");
 const { cmd } = require('../command');
 
-async function dl(url) {
-    try {
-        let res = await axios.get(url, { headers: { "User-Agent": "Mozilla/5.0" } }).catch(e => e.response)
-        let $ = cheerio.load(res.data)
-        let tag = $('script[data-test-id="video-snippet"]')
-        if (tag.length) {
-            let result = JSON.parse(tag.text())
-            return {
-                title: result.name,
-                download: result.contentUrl
-            }
-        } else {
-            let json = JSON.parse($("script[data-relay-response='true']").eq(0).text())
-            let result = json.response.data["v3GetPinQuery"].data
-            return {
-                title: result.title,
-                download: result.imageLargeUrl
-            }
-        }
-    } catch {
-        return { msg: "Error, inténtalo de nuevo más tarde" }
-    }
-}
-
-const pins = async (judul) => {
-    const link = `https://id.pinterest.com/resource/BaseSearchResource/get/?source_url=%2Fsearch%2Fpins%2F%3Fq%3D${encodeURIComponent(judul)}%26rs%3Dtyped&data=%7B%22options%22%3A%7B%22applied_unified_filters%22%3Anull%2C%22appliedProductFilters%22%3A%22---%22%2C%22article%22%3Anull%2C%22auto_correction_disabled%22%3Afalse%2C%22corpus%22%3Anull%2C%22customized_rerank_type%22%3Anull%2C%22domains%22%3Anull%2C%22dynamicPageSizeExpGroup%22%3A%22control%22%2C%22filters%22%3Anull%2C%22journey_depth%22%3Anull%2C%22page_size%22%3Anull%2C%22price_max%22%3Anull%2C%22price_min%22%3Anull%2C%22query_pin_sigs%22%3Anull%2C%22query%22%3A%22${encodeURIComponent(judul)}%22%2C%22redux_normalize_feed%22%3Atrue%2C%22request_params%22%3Anull%2C%22rs%22%3A%22typed%22%2C%22scope%22%3A%22pins%22%2C%22selected_one_bar_modules%22%3Anull%2C%22seoDrawerEnabled%22%3Afalse%2C%22source_id%22%3Anull%2C%22source_module_id%22%3Anull%2C%22source_url%22%3A%22%2Fsearch%2Fpins%2F%3Fq%3D${encodeURIComponent(judul)}%26rs%3Dtyped%22%2C%22top_pin_id%22%3Anull%2C%22top_pin_ids%22%3Anull%7D%2C%22context%22%3A%7B%7D%7D`
-    const headers = {
-        'accept': 'application/json, text/javascript, */*; q=0.01',
-        'accept-language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
-        'priority': 'u=1, i',
-        'referer': 'https://id.pinterest.com/',
-        'screen-dpr': '1',
-        'sec-ch-ua': '"Not(A:Brand";v="99", "Google Chrome";v="133", "Chromium";v="133")',
-        'sec-ch-ua-full-version-list': '"Not(A:Brand";v="99.0.0.0", "Google Chrome";v="133.0.6943.142", "Chromium";v="133.0.6943.142")',
-        'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-model': '""',
-        'sec-ch-ua-platform': '"Windows"',
-        'sec-ch-ua-platform-version': '"10.0.0"',
-        'sec-fetch-dest': 'empty',
-        'sec-fetch-mode': 'cors',
-        'sec-fetch-site': 'same-origin',
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
-        'x-app-version': 'c056fb7',
-        'x-pinterest-appstate': 'active',
-        'x-pinterest-pws-handler': 'www/index.js',
-        'x-pinterest-source-url': '/',
-        'x-requested-with': 'XMLHttpRequest'
-    }
-    try {
-        const res = await axios.get(link, { headers })
-        if (res.data && res.data.resource_response && res.data.resource_response.data && res.data.resource_response.data.results) {
-            return res.data.resource_response.data.results.map(item => {
-                if (item.images) {
-                    return {
-                        image_large_url: item.images.orig?.url || null,
-                        image_medium_url: item.images['564x']?.url || null,
-                        image_small_url: item.images['236x']?.url || null
-                    }
-                }
-                return null
-            }).filter(img => img !== null)
-        }
-        return []
-    } catch (error) {
-        console.error('Error:', error)
-        return []
-    }
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 cmd({
-    pattern: "pinterest",
-    alias: ["pin"],
+    pattern: "mega",
+    alias: ["mg"],
     react: "🕒",
-    desc: "Search Pinterest images",
+    desc: "Download files from MEGA",
     category: "download",
-    use: ".pinterest <query>",
+    use: ".mega <mega-url>",
     filename: __filename
-}, async (conn, mek, m, { from, text, args, q, reply }) => {
+}, async (conn, mek, m, { from, q, reply }) => {
     try {
-        const searchQuery = q || text || args.join(' ');
+        if (!q) {
+            return reply(`❀ Please send a MEGA link to download the file.`)
+        }
+
+        await reply("🕒 Downloading from MEGA...")
+
+        const file = File.fromURL(q)
+        await file.loadAttributes()
         
-        if (!searchQuery) return reply(`❀ Please enter what you want to search on Pinterest.`)
+        let maxSize = 300 * 1024 * 1024;
+        if (file.size >= maxSize) {
+            return reply(`ꕥ The file is too heavy (Maximum weight: 300MB).`)
+        }
+        
+        let cap = `*乂 MEGA - DOWNLOADER! 乂*\n\n≡ Name : ${file.name}\n≡ Size : ${formatBytes(file.size)}\n≡ URL: ${q}`
+        
+        await reply(cap)
 
-        await reply("🕒 Searching Pinterest...")
-
-        if (searchQuery.includes("https://")) {
-            let i = await dl(searchQuery)
-            if (i.msg) return reply(i.msg)
-            
-            let isVideo = i.download && i.download.includes(".mp4")
-            await conn.sendMessage(from, { 
-                [isVideo ? "video" : "image"]: { url: i.download }, 
-                caption: i.title || 'Pinterest Media'
+        const data = await file.downloadBuffer()
+        const fileExtension = path.extname(file.name).toLowerCase()
+        const mimeTypes = {
+            ".mp4": "video/mp4",
+            ".pdf": "application/pdf",
+            ".zip": "application/zip",
+            ".rar": "application/x-rar-compressed",
+            ".7z": "application/x-7z-compressed",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+        }
+        
+        let mimetype = mimeTypes[fileExtension] || "application/octet-stream"
+        
+        // Send file based on type
+        if (mimetype.startsWith('video/')) {
+            await conn.sendMessage(from, {
+                video: data,
+                caption: file.name,
+                fileName: file.name,
+                mimetype: mimetype
+            }, { quoted: m })
+        } else if (mimetype.startsWith('image/')) {
+            await conn.sendMessage(from, {
+                image: data,
+                caption: file.name,
+                fileName: file.name,
+                mimetype: mimetype
             }, { quoted: m })
         } else {
-            const results = await pins(searchQuery)
-            if (!results.length) {
-                return reply(`ꕥ No results found for "${searchQuery}".`)
-            }
-            
-            // Send multiple images
-            const medias = results.slice(0, 10)
-            for (let img of medias) {
-                if (img && img.image_large_url) {
-                    await conn.sendMessage(from, { 
-                        image: { url: img.image_large_url } 
-                    }, { quoted: m })
-                    // Small delay to avoid rate limiting
-                    await new Promise(resolve => setTimeout(resolve, 500))
-                }
-            }
-            
             await conn.sendMessage(from, {
-                text: `❀ Pinterest - Search ❀\n\n✧ Search » "${searchQuery}"\n✐ Results » ${medias.length}`
+                document: data,
+                fileName: file.name,
+                mimetype: mimetype
             }, { quoted: m })
         }
 
     } catch (e) {
-        console.error('Pinterest Error:', e)
+        console.error('MEGA Download Error:', e)
         reply(`⚠️ A problem has occurred.\n\n${e.message}`)
     }
 })
