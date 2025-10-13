@@ -2,7 +2,7 @@ const { cmd } = require("../command");
 const axios = require("axios");
 
 cmd({
-    pattern: "wallpaper",
+    pattern: "wallpaper1",
     alias: ["wall", "wp", "background"],
     react: "🎑",
     desc: "Search and download HD wallpapers",
