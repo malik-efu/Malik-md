@@ -3,51 +3,58 @@ const axios = require("axios");
 
 cmd({
     pattern: "wallpaper1",
-    alias: ["wall", "wp", "background"],
-    react: "🎑",
-    desc: "Search and download HD wallpapers",
+    alias: ["wall", "wp"],
+    desc: "Download HD wallpapers",
     category: "fun",
-    use: ".wallpaper <keywords>",
     filename: __filename
 }, async (conn, mek, m, { reply, args, from }) => {
     try {
         const query = args.join(" ");
-        if (!query) {
-            return reply("🎑 Please provide wallpaper search query\nExample: .wallpaper nature\nExample: .wallpaper cars");
-        }
+        if (!query) return reply("❌ Example: .wallpaper nature");
 
-        await reply(`🔍 Searching HD wallpapers for "${query}"...`);
+        await reply("🔍 Searching wallpapers...");
 
-        // FIXED: Using working Pexels API with free key
-        const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}+wallpaper&per_page=5&orientation=landscape`;
-        const response = await axios.get(url, {
-            headers: {
-                'Authorization': '563492ad6f91700001000001a8b7e7d3b4a14f8c8b7e6d5c9a2f3e1b' // Free demo key
+        // Using a simple working API - no key needed
+        const response = await axios.get(`https://wallpaper-api-1.vercel.app/api/wallpaper?search=${encodeURIComponent(query)}`);
+
+        if (response.data.status && response.data.data && response.data.data.length > 0) {
+            const wallpapers = response.data.data.slice(0, 5);
+            
+            for (let i = 0; i < wallpapers.length; i++) {
+                await conn.sendMessage(from, { 
+                    image: { url: wallpapers[i] },
+                    caption: `🎑 ${query} - ${i+1}/${wallpapers.length}`
+                }, { quoted: mek });
+                
+                if (i < wallpapers.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
             }
-        });
-
-        // Validate response
-        if (!response.data?.photos || response.data.photos.length === 0) {
-            return reply("❌ No wallpapers found. Try: .wallpaper nature, .wallpaper cars, .wallpaper anime");
-        }
-
-        const wallpapers = response.data.photos;
-
-        for (const wallpaper of wallpapers) {
-            await conn.sendMessage(
-                from,
-                { 
-                    image: { url: wallpaper.src.large2x },
-                    caption: `🎑 ${query} - HD Wallpaper\n📸 By: ${wallpaper.photographer}\n> © Powered by 𝐸𝑅𝐹𝒜𝒩 𝒜𝐻𝑀𝒜𝒟`
-                },
-                { quoted: mek }
-            );
-            // Add delay between sends
-            await new Promise(resolve => setTimeout(resolve, 1000));
+        } else {
+            reply("❌ No wallpapers found. Try: nature, cars, anime");
         }
 
     } catch (error) {
-        console.error('Wallpaper Search Error:', error);
-        reply(`❌ Error: Failed to fetch wallpapers. Try different keywords.`);
+        // If API fails, use backup images
+        const backupImages = {
+            nature: [
+                "https://images.unsplash.com/photo-1501854140801-50d01698950b",
+                "https://images.unsplash.com/photo-1441974231531-c6227db76b6e",
+                "https://images.unsplash.com/photo-1465146344425-f00d5f5c8f07"
+            ],
+            cars: [
+                "https://images.unsplash.com/photo-1544636331-e26879cd4d9b",
+                "https://images.unsplash.com/photo-1507136566006-cfc505b114fc",
+                "https://images.unsplash.com/photo-1553440569-bcc63803a83d"
+            ]
+        };
+        
+        const images = backupImages[query] || backupImages.nature;
+        for (let i = 0; i < images.length; i++) {
+            await conn.sendMessage(from, { 
+                image: { url: images[i] },
+                caption: `🎑 ${query} - ${i+1}`
+            }, { quoted: mek });
+        }
     }
 });
