@@ -2,7 +2,7 @@ const { cmd } = require("../command");
 const axios = require('axios');
 
 cmd({
-    pattern: "img",
+    pattern: "img1",
     alias: ["image", "pic"],
     desc: "Search and send images",
     category: "search",
