@@ -1,43 +1,33 @@
 const { cmd } = require("../command");
+const axios = require('axios');
 
 cmd({
-    pattern: "img1",
-    alias: ["image"],
-    desc: "Search images",
+    pattern: "img",
+    alias: ["image", "pic"],
+    desc: "Search and send images",
     category: "search",
     filename: __filename
 }, async (client, message, match) => {
     try {
-        if (!match) return await message.reply("❌ Example: .img cats");
+        if (!match) return await message.reply("❌ Give search term\nExample: .img cats");
 
-        await message.reply("📸 Sending sample images...");
+        await message.reply("🔍 Searching images...");
 
-        // Sample image URLs for testing
-        const sampleImages = {
-            cats: [
-                "https://cdn.pixabay.com/photo/2017/02/20/18/03/cat-2083492_1280.jpg",
-                "https://cdn.pixabay.com/photo/2014/11/30/14/11/cat-551554_1280.jpg"
-            ],
-            dogs: [
-                "https://cdn.pixabay.com/photo/2018/03/31/06/31/dog-3277416_1280.jpg",
-                "https://cdn.pixabay.com/photo/2016/12/13/05/15/puppy-1903313_1280.jpg"
-            ],
-            cars: [
-                "https://cdn.pixabay.com/photo/2012/11/02/13/02/car-63930_1280.jpg",
-                "https://cdn.pixabay.com/photo/2015/05/28/23/12/auto-788747_1280.jpg"
-            ]
-        };
+        // Using free Unsplash API for high-quality images
+        const response = await axios.get(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(match)}&per_page=5&client_id=YOUR_ACCESS_KEY`);
 
-        const images = sampleImages[match.toLowerCase()] || sampleImages.cats;
+        const images = response.data.results;
         
-        for (let i = 0; i < images.length; i++) {
+        if (!images.length) return await message.reply("❌ No images found");
+
+        for (let i = 0; i < Math.min(images.length, 5); i++) {
             await client.sendMessage(message.jid, {
-                image: { url: images[i] },
-                caption: `📸 ${match} - ${i + 1}`
+                image: { url: images[i].urls.regular },
+                caption: `📸 ${match} - ${i + 1}/${Math.min(images.length, 5)}`
             });
         }
 
     } catch (error) {
-        await message.reply("❌ Try: .img cats, .img dogs, .img cars");
+        await message.reply("❌ Use: .img cats, .img dogs, .img cars");
     }
 });
