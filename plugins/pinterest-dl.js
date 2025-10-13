@@ -1,49 +1,47 @@
-const { cmd } = require('../command');
+const { cmd } = require("../command");
 const axios = require('axios');
 
 cmd({
     pattern: "pindl",
-    alias: ["pinterestdl", "pin", "pins", "pindownload"],
-    desc: "Download Pinterest media as Document",
+    alias: ["pinterest", "pindownload"],
+    desc: "Download Pinterest videos",
     category: "download",
     filename: __filename
-}, async (conn, mek, m, { args, from, reply }) => {
+}, async (client, message, match) => {
     try {
-        if (!args[0]) return reply('❎ Please provide Pinterest URL');
-
-        const pinterestUrl = args[0];
-        const response = await axios.get(`https://api.giftedtech.web.id/api/download/pinterestdl?apikey=gifted&url=${encodeURIComponent(pinterestUrl)}`);
-
-        if (!response.data.success) {
-            return reply('❎ Failed to fetch from Pinterest');
+        if (!match) {
+            return await message.reply(`📌 *Pinterest Download* 📌\n\nUsage: .pindl <pinterest_url>\nExample: .pindl https://pin.it/example`);
         }
 
-        const media = response.data.result.media;
-        const downloadUrl = media.find(item => item.type.includes('720p'))?.download_url || media[0].download_url;
-        const title = response.data.result.title || 'Pinterest Media';
+        await message.reply("🔍 Downloading from Pinterest...");
 
-        // Download media
-        const mediaResponse = await axios.get(downloadUrl, { responseType: 'arraybuffer' });
-        const mediaBuffer = Buffer.from(mediaResponse.data);
+        // Extract Pinterest URL
+        const pinUrl = match.startsWith('http') ? match : `https://pin.it/${match}`;
+        
+        // Use Pinterest downloader API
+        const apiUrl = `https://pinterest-video-api.p.rapidapi.com/download?url=${encodeURIComponent(pinUrl)}`;
+        
+        const response = await axios.get(apiUrl, {
+            headers: {
+                'X-RapidAPI-Key': 'adb03fd619msh91f2556557237f4p10f659jsn96ca8c5079ee',
+                'X-RapidAPI-Host': 'pinterest-video-api.p.rapidapi.com'
+            }
+        });
 
-        // Create filename
-        const isVideo = media[0].type.includes('video');
-        const fileName = `${title.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}${isVideo ? '.mp4' : '.jpg'}`;
-        const mimeType = isVideo ? 'video/mp4' : 'image/jpeg';
-
-        // Send as document
-        await conn.sendMessage(from, { 
-            document: mediaBuffer,
-            fileName: fileName,
-            mimetype: mimeType,
-            caption: `📥 *Pinterest Download*\n\n📛 Title: ${title}\n📦 Format: Document\n🎬 Type: ${media[0].type}\n\n✅ Downloaded via DARKZONE-MD`
-        }, { quoted: mek });
-
-        await conn.sendMessage(from, { react: { text: '✅', key: mek.key } });
+        if (response.data.url || response.data.video_url) {
+            const videoUrl = response.data.url || response.data.video_url;
+            
+            // Send as video
+            await client.sendMessage(message.jid, {
+                video: { url: videoUrl },
+                caption: "📌 Pinterest Video Downloaded Successfully!"
+            });
+            
+        } else {
+            await message.reply("❌ No video found in this Pinterest link.");
+        }
 
     } catch (error) {
-        console.error(error);
-        await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
-        reply('❎ Error: ' + error.message);
+        await message.reply("❌ Failed to download. Check if it's a valid Pinterest video URL.");
     }
 });
