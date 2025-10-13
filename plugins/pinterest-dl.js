@@ -1,56 +1,44 @@
+const axios = require('axios');
 const { cmd } = require('../command');
 
 cmd({
     pattern: "listonline",
     alias: ["online", "linea", "enlinea"],
-    react: "👥",
+    react: "🟢",
     desc: "Show online users in group",
     category: "group",
     use: ".listonline",
     filename: __filename
-}, async (conn, mek, m, { from, isGroup, groupMetadata, reply }) => {
+}, async (conn, mek, m, { from, reply }) => {
     try {
-        if (!isGroup) {
-            return reply("❌ This command only works in groups");
-        }
-
-        // Get group profile picture
-        const pp = await conn.profilePictureUrl(from, 'image').catch((_) => null);
+        const pp = await conn.profilePictureUrl(from, 'image').catch((_) => 'https://files.catbox.moe/xr2m6u.jpg')
         
-        // Get group participants (actual members)
-        const groupData = await conn.groupMetadata(from);
-        const participants = groupData.participants || [];
-        
-        // Filter only online users (those who are currently active)
-        // Since we can't get real online status, we'll show all participants
-        const onlineUsers = participants
-            .filter(p => p.id !== conn.user.id) // Exclude bot itself
-            .sort((a, b) => a.id.localeCompare(b.id)); // Sort alphabetically
-
-        if (onlineUsers.length === 0) {
-            return reply("❌ No users found in this group");
-        }
-
-        // Create the list with mentions
-        const onlineList = onlineUsers
-            .map((user, index) => `*${index + 1}.* @${user.id.split('@')[0]}`)
-            .join("\n");
-
-        const totalUsers = onlineUsers.length;
-        const groupName = groupData.subject || 'Group';
-
-        const caption = `👥 *ONLINE USERS - ${groupName}*\n\n${onlineList}\n\n📊 *Total Users:* ${totalUsers}\n\n> _DARKZONE-MD_`;
-
-        await conn.sendMessage(from, { 
-            image: pp ? { url: pp } : undefined,
-            caption: caption, 
-            contextInfo: { 
-                mentionedJid: onlineUsers.map(user => user.id) 
+        let id = from;
+        const participantesUnicos = Object.values(conn.chats[id]?.messages || {}).map((item) => item.key.participant).filter((value, index, self) => self.indexOf(value) === index)
+        const participantesOrdenados = participantesUnicos
+        .filter(participante => participante)
+        .sort((a, b) => {
+            if (a && b) {
+                return a.split("@")[0].localeCompare(b.split("@")[0])
             }
-        }, { quoted: m });
-
+            return 0
+        })
+        
+        const listaEnLinea =
+        participantesOrdenados
+        .map((k) => `*●* @${k.split("@")[0]}`)
+        .join("\n") || "ꕥ No hay usuarios en línea en este momento."
+        
+        await conn.sendMessage(from, { 
+            image: { url: pp }, 
+            caption: `*❀ Lista de usuarios en línea:*\n\n${listaEnLinea}\n\n> DARKZONE-MD`, 
+            contextInfo: { 
+                mentionedJid: participantesOrdenados 
+            }
+        }, { quoted: m })
+        
     } catch (error) {
-        console.error('Online List Error:', error);
-        reply(`❌ Failed to get online users: ${error.message}`);
+        console.error('Online List Error:', error)
+        reply(`⚠️ A problem has occurred.\n\n${error.message}`)
     }
-});
+})
