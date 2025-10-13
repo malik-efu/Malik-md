@@ -1,7 +1,7 @@
 const { cmd } = require("../command");
 
 cmd({
-    pattern: "img",
+    pattern: "img1",
     alias: ["image"],
     desc: "Search images",
     category: "search",
