@@ -1,204 +1,105 @@
-const moment = require('moment-timezone');
+const axios = require('axios');
+const { generateWAMessageContent, generateWAMessageFromContent, proto } = require('@whiskeysockets/baileys');
 const { cmd } = require('../command');
 
-// Helper function to validate birth date
-function validarFechaNacimiento(text) {
-    const regex = /^\d{1,2}\/\d{1,2}\/\d{4}$/
-    if (!regex.test(text)) return null
-    const [dia, mes, año] = text.split('/').map(n => parseInt(n))
-    const fecha = moment.tz({ day: dia, month: mes - 1, year: año }, 'America/Caracas')
-    if (!fecha.isValid()) return null
-    const ahora = moment.tz('America/Caracas')
-    const edad = ahora.diff(fecha, 'years')
-    if (edad < 5 || edad > 120) return null
-    const meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
-    return `${dia} de ${meses[mes - 1]} de ${año}`
-}
-
-// Helper function to assign gender
-function asignarGenre(text) {
-    let genre
-    switch (text.toLowerCase()) {
-        case "hombre":
-            genre = "Hombre"
-            break
-        case "mujer":
-            genre = "Mujer"
-            break
-        default:
-            return null
-    }
-    return genre
-}
-
-// Set Profile Main Command
 cmd({
-    pattern: "setprofile",
-    alias: ["profilehelp"],
-    react: "👤",
-    desc: "Profile settings help",
-    category: "profile",
-    use: ".setprofile",
+    pattern: "pinterest",
+    alias: ["pinsearch"],
+    react: "🔍",
+    desc: "Search Pinterest images",
+    category: "search",
+    use: ".pinterest <query>",
     filename: __filename
-}, async (conn, mek, m, { from, reply, prefix }) => {
-    return reply(`✦ Ingresa la categoría que quieras modificar.\n\n🜸 *_Categorías disponibles:_*\n\n*• ${prefix}setbirth _<01/01/2000|(dia/mes/año)>_*\n> *Establece tu fecha de cumpleaños.*\n*• ${prefix}delbirth*\n> *Borra tu fecha de cumpleaños establecida.*\n*• ${prefix}setgenre _<Hombre|Mujer>_*\n> *Establece tu género.*\n*• ${prefix}delgenre*\n> *Borra tu género establecido.*\n*• ${prefix}setdesc _<texto>_*\n> *Establece una descripción para tu perfil.*\n*• ${prefix}deldesc*\n> *Borra tu descripción establecida.*`)
-})
-
-// Set Birth Date Command
-cmd({
-    pattern: "setbirth",
-    react: "🎂",
-    desc: "Set your birth date",
-    category: "profile",
-    use: ".setbirth <dd/mm/yyyy>",
-    filename: __filename
-}, async (conn, mek, m, { from, q, reply, prefix, sender }) => {
+}, async (conn, mek, m, { from, text, q, reply }) => {
     try {
-        if (!q) return reply(`❀ Debes ingresar una fecha válida para tu cumpleaños.\n\n> ✐ Ejemplo » *${prefix}setbirth 01/01/2000* (día/mes/año)`)
+        const searchQuery = q || text;
         
-        const birth = validarFechaNacimiento(q)
-        if (!birth) {
-            return reply(`ꕥ La fecha ingresada no es válida o no tiene lógica.\n> Ejemplo: *${prefix}setbirth 01/12/2000*`)
+        if (!searchQuery) {
+            return reply("[❗] *What do you want to search on Pinterest?*");
         }
-        
-        // Store in database (you need to implement your database logic)
-        // user.birth = birth
-        return reply(`❀ Se ha establecido tu fecha de nacimiento como: *${birth}*!`)
-        
-    } catch (error) {
-        console.error('Set Birth Error:', error)
-        reply(`⚠️ A problem has occurred.\n\n${error.message}`)
-    }
-})
 
-// Delete Birth Date Command
-cmd({
-    pattern: "delbirth",
-    react: "🗑️",
-    desc: "Delete your birth date",
-    category: "profile",
-    use: ".delbirth",
-    filename: __filename
-}, async (conn, mek, m, { from, reply, sender }) => {
-    try {
-        // Check if user has birth date in database
-        // if (!user.birth) {
-        //     return reply(`ꕥ No tienes una fecha de nacimiento establecida que se pueda eliminar.`)
-        // }
-        
-        // Delete from database
-        // user.birth = ''
-        return reply(`❀ Tu fecha de nacimiento ha sido eliminada.`)
-        
-    } catch (error) {
-        console.error('Delete Birth Error:', error)
-        reply(`⚠️ A problem has occurred.\n\n${error.message}`)
-    }
-})
-
-// Set Gender Command
-cmd({
-    pattern: "setgenre",
-    alias: ["setgenero"],
-    react: "⚧️",
-    desc: "Set your gender",
-    category: "profile",
-    use: ".setgenre <hombre|mujer>",
-    filename: __filename
-}, async (conn, mek, m, { from, q, reply, prefix }) => {
-    try {
-        if (!q) return reply(`❀ Debes ingresar un género válido.\n> Ejemplo » *${prefix}setgenre hombre*`)
-        
-        let genre = asignarGenre(q)
-        if (!genre) {
-            return reply(`ꕥ Recuerda elegir un género válido.\n> Ejemplo: ${prefix}setgenre hombre`)
+        async function createImageMessage(imageUrl) {
+            const { imageMessage } = await generateWAMessageContent({
+                'image': {
+                    'url': imageUrl
+                }
+            }, {
+                'upload': conn.waUploadToServer
+            });
+            return imageMessage;
         }
-        
-        // Check if already has same gender
-        // if (user.genre === genre) {
-        //     return reply(`ꕥ Ya tienes establecido el género como *${user.genre}*.`)
-        // }
-        
-        // Store in database
-        // user.genre = genre
-        return reply(`❀ Se ha establecido tu género como: *${genre}*!`)
-        
-    } catch (error) {
-        console.error('Set Gender Error:', error)
-        reply(`⚠️ A problem has occurred.\n\n${error.message}`)
-    }
-})
 
-// Delete Gender Command
-cmd({
-    pattern: "delgenre",
-    react: "🗑️",
-    desc: "Delete your gender",
-    category: "profile",
-    use: ".delgenre",
-    filename: __filename
-}, async (conn, mek, m, { from, reply, sender }) => {
-    try {
-        // Check if user has gender in database
-        // if (!user.genre) {
-        //     return reply(`ꕥ No tienes un género asignado.`)
-        // }
-        
-        // Delete from database
-        // user.genre = ''
-        return reply(`❀ Se ha eliminado tu género.`)
-        
-    } catch (error) {
-        console.error('Delete Gender Error:', error)
-        reply(`⚠️ A problem has occurred.\n\n${error.message}`)
-    }
-})
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
 
-// Set Description Command
-cmd({
-    pattern: "setdesc",
-    alias: ["setdescription"],
-    react: "📝",
-    desc: "Set your profile description",
-    category: "profile",
-    use: ".setdesc <text>",
-    filename: __filename
-}, async (conn, mek, m, { from, q, reply, prefix }) => {
-    try {
-        if (!q) return reply(`❀ Debes especificar una descripción válida para tu perfil.\n\n> ✐ Ejemplo » *${prefix}setdesc Hola, uso WhatsApp!*`)
+        let cards = [];
+        let { data } = await axios.get("https://www.pinterest.com/resource/BaseSearchResource/get/?source_url=%2Fsearch%2Fpins%2F%3Fq%3D" + searchQuery + "&data=%7B%22options%22%3A%7B%22isPrefetch%22%3Afalse%2C%22query%22%3A%22" + searchQuery + "%22%2C%22scope%22%3A%22pins%22%2C%22no_fetch_context_on_resource%22%3Afalse%7D%2C%22context%22%3A%7B%7D%7D&_=1619980301559");
         
-        // Store in database
-        // user.description = q
-        return reply(`❀ Se ha establecido tu descripcion, puedes revisarla con #profile ฅ^•ﻌ•^ฅ`)
+        let imageUrls = data.resource_response.data.results.map(item => item.images.orig.url);
+        shuffleArray(imageUrls);
         
-    } catch (error) {
-        console.error('Set Description Error:', error)
-        reply(`⚠️ A problem has occurred.\n\n${error.message}`)
-    }
-})
+        let selectedImages = imageUrls.splice(0, 5);
+        let imageCount = 1;
 
-// Delete Description Command
-cmd({
-    pattern: "deldesc",
-    alias: ["deldescription"],
-    react: "🗑️",
-    desc: "Delete your profile description",
-    category: "profile",
-    use: ".deldesc",
-    filename: __filename
-}, async (conn, mek, m, { from, reply, sender }) => {
-    try {
-        // Check if user has description in database
-        // if (!user.description) {
-        //     return reply(`ꕥ No tienes una descripción establecida que se pueda eliminar.`)
-        // }
-        
-        // Delete from database
-        // user.description = ''
-        return reply(`❀ Tu descripción ha sido eliminada.`)
-        
+        for (let imageUrl of selectedImages) {
+            cards.push({
+                'body': proto.Message.InteractiveMessage.Body.fromObject({
+                    'text': "Image -" + (" " + imageCount++)
+                }),
+                'footer': proto.Message.InteractiveMessage.Footer.fromObject({
+                    'text': "Knight Bot"
+                }),
+                'header': proto.Message.InteractiveMessage.Header.fromObject({
+                    'title': '',
+                    'hasMediaAttachment': true,
+                    'imageMessage': await createImageMessage(imageUrl)
+                }),
+                'nativeFlowMessage': proto.Message.InteractiveMessage.NativeFlowMessage.fromObject({
+                    'buttons': [{
+                        'name': "cta_url",
+                        'buttonParamsJson': "{\"display_text\":\"url 📫\",\"Url\":\"https://www.pinterest.com/search/pins/?rs=typed&q=" + searchQuery + "\",\"merchant_url\":\"https://www.pinterest.com/search/pins/?rs=typed&q=" + searchQuery + "\"}"
+                    }]
+                })
+            });
+        }
+
+        const interactiveMessage = generateWAMessageFromContent(from, {
+            'viewOnceMessage': {
+                'message': {
+                    'messageContextInfo': {
+                        'deviceListMetadata': {},
+                        'deviceListMetadataVersion': 2
+                    },
+                    'interactiveMessage': proto.Message.InteractiveMessage.fromObject({
+                        'body': proto.Message.InteractiveMessage.Body.create({
+                            'text': "[❗] Results for: " + searchQuery
+                        }),
+                        'footer': proto.Message.InteractiveMessage.Footer.create({
+                            'text': "🔎 `P I N T E R E S T - S E A R C H`"
+                        }),
+                        'header': proto.Message.InteractiveMessage.Header.create({
+                            'hasMediaAttachment': false
+                        }),
+                        'carouselMessage': proto.Message.InteractiveMessage.CarouselMessage.fromObject({
+                            'cards': [...cards]
+                        })
+                    })
+                }
+            }
+        }, {
+            'quoted': m
+        });
+
+        await conn.relayMessage(from, interactiveMessage.message, {
+            'messageId': interactiveMessage.key.id
+        });
+
     } catch (error) {
-        console.error('Delete Description Error:', error)
-        reply(`⚠️ A problem has occurred.\n\n${error.message}`)
+        console.error('Pinterest Search Error:', error);
+        reply("❌ Failed to search Pinterest. Please try again.");
     }
-})
+});
