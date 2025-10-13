@@ -82,38 +82,46 @@ cmd({
     filename: __filename
 }, async (conn, mek, m, { from, text, args, q, reply }) => {
     try {
-        if (!text) return reply(`❀ Please enter what you want to search on Pinterest.`)
+        const searchQuery = q || text || args.join(' ');
+        
+        if (!searchQuery) return reply(`❀ Please enter what you want to search on Pinterest.`)
 
         await reply("🕒 Searching Pinterest...")
 
-        if (text.includes("https://")) {
-            let i = await dl(args[0])
-            let isVideo = i.download.includes(".mp4")
+        if (searchQuery.includes("https://")) {
+            let i = await dl(searchQuery)
+            if (i.msg) return reply(i.msg)
+            
+            let isVideo = i.download && i.download.includes(".mp4")
             await conn.sendMessage(from, { 
                 [isVideo ? "video" : "image"]: { url: i.download }, 
-                caption: i.title 
+                caption: i.title || 'Pinterest Media'
             }, { quoted: m })
         } else {
-            const results = await pins(text)
+            const results = await pins(searchQuery)
             if (!results.length) {
-                return reply(`ꕥ No results found for "${text}".`)
+                return reply(`ꕥ No results found for "${searchQuery}".`)
             }
             
             // Send multiple images
             const medias = results.slice(0, 10)
             for (let img of medias) {
-                await conn.sendMessage(from, { 
-                    image: { url: img.image_large_url } 
-                }, { quoted: m })
+                if (img && img.image_large_url) {
+                    await conn.sendMessage(from, { 
+                        image: { url: img.image_large_url } 
+                    }, { quoted: m })
+                    // Small delay to avoid rate limiting
+                    await new Promise(resolve => setTimeout(resolve, 500))
+                }
             }
             
             await conn.sendMessage(from, {
-                text: `❀ Pinterest - Search ❀\n\n✧ Search » "${text}"\n✐ Results » ${medias.length}`
+                text: `❀ Pinterest - Search ❀\n\n✧ Search » "${searchQuery}"\n✐ Results » ${medias.length}`
             }, { quoted: m })
         }
 
     } catch (e) {
         console.error('Pinterest Error:', e)
-        reply(`⚠️ A problem has occurred.\n\n` + e)
+        reply(`⚠️ A problem has occurred.\n\n${e.message}`)
     }
 })
