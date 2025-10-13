@@ -1,73 +1,50 @@
-const { cmd } = require("../command");
+const axios = require('axios');
+const { sticker } = require('../src/libraries/sticker.js');
+const { cmd } = require('../command');
 
 cmd({
-  pattern: "posta",
-  alias: ["status", "story"],
-  desc: "Post text, image, or video to WhatsApp status",
-  category: "utility",
-  filename: __filename
-}, async (client, message, match, { isCreator }) => {
-  if (!isCreator) return await message.reply("*📛 Owner only command*");
-
-  const quoted = message.quoted || message;
-
-  // 1. Handle Text Status
-  if (quoted.text && !quoted.hasMedia) {
+    pattern: "stickerpack",
+    alias: ["spack", "getpack"],
+    react: "📦",
+    desc: "Download sticker pack from getstickerpack.com",
+    category: "download",
+    use: ".stickerpack <url>",
+    filename: __filename
+}, async (conn, mek, m, { from, q, reply }) => {
     try {
-      const text = quoted.text.trim();
-      if (!text) return await message.reply("⚠ Text cannot be empty");
-
-      // WhatsApp status text update
-      await client.sendMessage("status@broadcast", {
-        text: text,
-        backgroundColor: "#000000", // Optional: Customize background color
-        font: 1 // Optional: Font style (1-5)
-      }, { statusJidList: [] }); // Empty list for all contacts
-
-      return await message.reply("✅ Text status posted successfully");
-    } catch (error) {
-      console.error("Text Status Error:", error);
-      return await message.reply(`❌ Failed to post text status: ${error.message}`);
-    }
-  }
-
-  // 2. Handle Media Status (Image or Video)
-  if (quoted.hasMedia) {
-    try {
-      const media = await quoted.downloadMedia(); // Use downloadMedia for Baileys
-      if (!media) return await message.reply("⚠ No media found");
-
-      const caption = quoted.caption || "";
-      let messageType;
-
-      // Determine media type
-      if (quoted.type === "imageMessage") {
-        messageType = "image";
-      } else if (quoted.type === "videoMessage") {
-        messageType = "video";
-        // Check video duration (WhatsApp status videos must be ≤ 30 seconds)
-        if (quoted.videoMessage?.seconds > 30) {
-          return await message.reply("⚠ Video duration must be 30 seconds or less");
+        if (!q) {
+            return reply(`❌ Please provide a sticker pack URL\nExample: .stickerpack https://getstickerpack.com/stickers/flork-memes-4-1`);
         }
-      } else {
-        return await message.reply("⚠ Unsupported media type");
-      }
 
-      // Post media to status
-      await client.sendMessage("status@broadcast", {
-        [messageType]: {
-          url: media.url || media, // Use media URL or buffer
-          mimetype: quoted.mimetype || (messageType === "image" ? "image/jpeg" : "video/mp4")
-        },
-        caption: caption
-      }, { statusJidList: [] }); // Empty list for all contacts
+        const url = q;
+        const response = await axios.get(`https://api.akuari.my.id/downloader/stickerpack?link=${url}`);
+        const json = response.data;
 
-      return await message.reply(`✅ ${messageType.charAt(0).toUpperCase() + messageType.slice(1)} status posted successfully`);
+        if (!json.result && !Array.isArray(json)) {
+            throw new Error('No sticker pack found');
+        }
+
+        const stickerData = json.result || json;
+        
+        for (const data of stickerData) {
+            const stikers = await sticker(false, data, global.packname, global.author);
+            await conn.sendFile(from, stikers, null, {
+                asSticker: true
+            }, m, true, {
+                contextInfo: {
+                    'forwardingScore': 200,
+                    'isForwarded': true
+                }
+            }, {
+                quoted: m
+            });
+            
+            // Add delay to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+
     } catch (error) {
-      console.error("Media Status Error:", error);
-      return await message.reply(`❌ Failed to post media status: ${error.message}`);
+        console.error('Sticker Pack Error:', error);
+        reply(`❌ Failed to download sticker pack. Please check the URL and try again.`);
     }
-  }
-
-  return await message.reply("⚠ Please reply to text, image, or video to post as status");
 });
