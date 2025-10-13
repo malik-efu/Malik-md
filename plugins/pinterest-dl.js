@@ -30,7 +30,7 @@ function getGoogleImageSearch(query) {
 }
 
 cmd({
-    pattern: "imagen",
+    pattern: "imagen1",
     alias: ["image", "img"],
     react: "🕒",
     desc: "Search for images",
