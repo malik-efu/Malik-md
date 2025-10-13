@@ -1,60 +1,65 @@
-const { cmd } = require("../command");
-const axios = require("axios");
+const axios = require('axios');
+const config = require('../config');
+const { cmd } = require('../command');
 
-cmd({
-    pattern: "wallpaper1",
-    alias: ["wall", "wp"],
-    desc: "Download HD wallpapers",
-    category: "fun",
-    filename: __filename
-}, async (conn, mek, m, { reply, args, from }) => {
-    try {
-        const query = args.join(" ");
-        if (!query) return reply("❌ Example: .wallpaper nature");
-
-        await reply("🔍 Searching wallpapers...");
-
-        // Using a simple working API - no key needed
-        const response = await axios.get(`https://wallpaper-api-1.vercel.app/api/wallpaper?search=${encodeURIComponent(query)}`);
-
-        if (response.data.status && response.data.data && response.data.data.length > 0) {
-            const wallpapers = response.data.data.slice(0, 5);
-            
-            for (let i = 0; i < wallpapers.length; i++) {
-                await conn.sendMessage(from, { 
-                    image: { url: wallpapers[i] },
-                    caption: `🎑 ${query} - ${i+1}/${wallpapers.length}`
-                }, { quoted: mek });
-                
-                if (i < wallpapers.length - 1) {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                }
+function getGoogleImageSearch(query) {
+    const apis = [
+        `https://api.delirius.xyz/search/gimage?query=${encodeURIComponent(query)}`,
+        `https://api.siputzx.my.id/api/images?query=${encodeURIComponent(query)}`
+    ]
+    
+    return { 
+        getAll: async () => {
+            for (const url of apis) {
+                try {
+                    const res = await axios.get(url)
+                    const data = res.data
+                    if (Array.isArray(data?.data)) {
+                        const urls = data.data.map(d => d.url).filter(u => typeof u === 'string' && u.startsWith('http'))
+                        if (urls.length) return urls
+                    }
+                } catch {}
             }
-        } else {
-            reply("❌ No wallpapers found. Try: nature, cars, anime");
-        }
-
-    } catch (error) {
-        // If API fails, use backup images
-        const backupImages = {
-            nature: [
-                "https://images.unsplash.com/photo-1501854140801-50d01698950b",
-                "https://images.unsplash.com/photo-1441974231531-c6227db76b6e",
-                "https://images.unsplash.com/photo-1465146344425-f00d5f5c8f07"
-            ],
-            cars: [
-                "https://images.unsplash.com/photo-1544636331-e26879cd4d9b",
-                "https://images.unsplash.com/photo-1507136566006-cfc505b114fc",
-                "https://images.unsplash.com/photo-1553440569-bcc63803a83d"
-            ]
-        };
-        
-        const images = backupImages[query] || backupImages.nature;
-        for (let i = 0; i < images.length; i++) {
-            await conn.sendMessage(from, { 
-                image: { url: images[i] },
-                caption: `🎑 ${query} - ${i+1}`
-            }, { quoted: mek });
+            return []
+        },
+        getRandom: async () => {
+            const all = await this.getAll()
+            return all[Math.floor(Math.random() * all.length)] || null
         }
     }
-});
+}
+
+cmd({
+    pattern: "imagen",
+    alias: ["image", "img"],
+    react: "🕒",
+    desc: "Search for images",
+    category: "search",
+    use: ".imagen <query>",
+    filename: __filename
+}, async (conn, mek, m, { from, q, reply }) => {
+    try {
+        if (!q) return reply(`❀ Please enter a text to search for an Image.`)
+
+        await reply("🕒 Searching for images...")
+
+        const res = await getGoogleImageSearch(q)
+        const urls = await res.getAll()
+        
+        if (urls.length < 2) return reply('✧ Not enough images found for an album.')
+        
+        const medias = urls.slice(0, 10).map(url => ({ image: { url } }))
+        const caption = `❀ Search results for: ${q}`
+        
+        // Send multiple images
+        for (let media of medias) {
+            await conn.sendMessage(from, media, { quoted: m })
+        }
+        
+        await conn.sendMessage(from, { text: caption }, { quoted: m })
+
+    } catch (error) {
+        console.error('Image Search Error:', error)
+        reply(`⚠️ A problem has occurred.\n\n${error.message}`)
+    }
+})
