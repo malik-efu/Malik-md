@@ -13,11 +13,6 @@ cmd({
   reply
 }) => {
   try {
-    // Initialize warnings if not exists
-    if (!global.warnings) {
-      global.warnings = {};
-    }
-
     // Only act in groups where bot is admin and sender isn't admin
     if (!isGroup || isAdmins || !isBotAdmins) {
       return;
@@ -58,32 +53,13 @@ cmd({
         console.error("Failed to delete message:", error);
       }
 
-      // Update warning count for user
-      global.warnings[sender] = (global.warnings[sender] || 0) + 1;
-      const warningCount = global.warnings[sender];
-
-      // Handle warnings
-      if (warningCount < 4) {
-        // Send warning message
-        await conn.sendMessage(from, {
-          text: `‎*⚠️LINKS ARE NOT ALLOWED⚠️*\n` +
-                `*╭────⬡ WARNING ⬡────*\n` +
-                `*├▢ USER :* @${sender.split('@')[0]}!\n` +
-                `*├▢ COUNT : ${warningCount}*\n` +
-                `*├▢ REASON : LINK SENDING*\n` +
-                `*├▢ WARN LIMIT : 3*\n` +
-                `*╰────────────────*`,
-          mentions: [sender]
-        });
-      } else {
-        // Remove user if they exceed warning limit
-        await conn.sendMessage(from, {
-          text: `@${sender.split('@')[0]} *HAS BEEN REMOVED - WARN LIMIT EXCEEDED!*`,
-          mentions: [sender]
-        });
-        await conn.groupParticipantsUpdate(from, [sender], "remove");
-        delete global.warnings[sender];
-      }
+      // Direct kick without warnings
+      await conn.sendMessage(from, {
+        text: `@${sender.split('@')[0]} *HAS BEEN REMOVED - LINKS ARE NOT ALLOWED!*`,
+        mentions: [sender]
+      });
+      
+      await conn.groupParticipantsUpdate(from, [sender], "remove");
     }
   } catch (error) {
     console.error("Anti-link error:", error);
