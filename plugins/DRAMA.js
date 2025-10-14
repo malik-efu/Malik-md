@@ -45,7 +45,7 @@ cmd({
 
         if (result) {
             await conn.sendMessage(from, {
-                text: `🤖 *Gemini AI*\n\n${result}\n\n*Powered by Google Gemini*`,
+                text: `🤖 *Gemini AI*\n\n${result}\n\n*DARKZONE-MD*`,
                 contextInfo: {
                     mentionedJid: [m.sender],
                     forwardingScore: 999,
