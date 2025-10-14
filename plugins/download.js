@@ -6,10 +6,9 @@ const { igdl } = require("ruhend-scraper");
 const axios = require("axios");
 const { cmd, commands } = require('../command');
 
-
-
-
-// twitter-dl
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 🐦 Twitter Downloader
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 cmd({
   pattern: "twitter",
@@ -17,20 +16,13 @@ cmd({
   desc: "Download Twitter videos",
   category: "download",
   filename: __filename
-}, async (conn, m, store, {
-  from,
-  quoted,
-  q,
-  reply
-}) => {
+}, async (conn, m, store, { from, quoted, q, reply }) => {
   try {
     if (!q || !q.startsWith("https://")) {
       return conn.sendMessage(from, { text: "❌ Please provide a valid Twitter URL." }, { quoted: m });
     }
 
-    await conn.sendMessage(from, {
-      react: { text: '⏳', key: m.key }
-    });
+    await conn.sendMessage(from, { react: { text: '⏳', key: m.key } });
 
     const response = await axios.get(`https://www.dark-yasiya-api.site/download/twitter?url=${q}`);
     const data = response.data;
@@ -41,17 +33,21 @@ cmd({
 
     const { desc, thumb, video_sd, video_hd } = data.result;
 
-    const caption = `╭━━━〔 *TWITTER DOWNLOADER* 〕━━━⊷\n`
-      + `┃▸ *Description:* ${desc || "No description"}\n`
-      + `╰━━━⪼\n\n`
-      + `📹 *Download Options:*\n`
-      + `1️⃣  *SD Quality*\n`
-      + `2️⃣  *HD Quality*\n`
-      + `🎵 *Audio Options:*\n`
-      + `3️⃣  *Audio*\n`
-      + `4️⃣  *Document*\n`
-      + `5️⃣  *Voice*\n\n`
-      + `📌 *Reply with the number to download your choice.*`;
+    const caption = `╭─────────────❐
+│ 🐦 *Twitter Video Downloader*
+│─────────────────────
+│ 💬 *Description:* ${desc || "No description"}
+│─────────────────────
+│ 🎬 *Choose Quality Below:*
+│  1️⃣ SD Quality
+│  2️⃣ HD Quality
+│─────────────────────
+│ 🎧 *Audio Options:*
+│  3️⃣ Audio
+│  4️⃣ Document
+│  5️⃣ Voice Note
+╰─────────────❐
+💠 *Owner:* 𝐸𝑅𝐹𝒜𝒩 𝒜𝐻𝑀𝒜𝒟 💎`;
 
     const sentMsg = await conn.sendMessage(from, {
       image: { url: thumb },
@@ -69,49 +65,24 @@ cmd({
       const isReplyToBot = receivedMsg.message.extendedTextMessage?.contextInfo?.stanzaId === messageID;
 
       if (isReplyToBot) {
-        await conn.sendMessage(senderID, {
-          react: { text: '⬇️', key: receivedMsg.key }
-        });
+        await conn.sendMessage(senderID, { react: { text: '⬇️', key: receivedMsg.key } });
 
         switch (receivedText) {
           case "1":
-            await conn.sendMessage(senderID, {
-              video: { url: video_sd },
-              caption: "📥 *Downloaded in SD Quality*"
-            }, { quoted: receivedMsg });
+            await conn.sendMessage(senderID, { video: { url: video_sd }, caption: "📥 *Downloaded in SD Quality*" }, { quoted: receivedMsg });
             break;
-
           case "2":
-            await conn.sendMessage(senderID, {
-              video: { url: video_hd },
-              caption: "📥 *Downloaded in HD Quality*"
-            }, { quoted: receivedMsg });
+            await conn.sendMessage(senderID, { video: { url: video_hd }, caption: "📥 *Downloaded in HD Quality*" }, { quoted: receivedMsg });
             break;
-
           case "3":
-            await conn.sendMessage(senderID, {
-              audio: { url: video_sd },
-              mimetype: "audio/mpeg"
-            }, { quoted: receivedMsg });
+            await conn.sendMessage(senderID, { audio: { url: video_sd }, mimetype: "audio/mpeg" }, { quoted: receivedMsg });
             break;
-
           case "4":
-            await conn.sendMessage(senderID, {
-              document: { url: video_sd },
-              mimetype: "audio/mpeg",
-              fileName: "Twitter_Audio.mp3",
-              caption: "📥 *Audio Downloaded as Document*"
-            }, { quoted: receivedMsg });
+            await conn.sendMessage(senderID, { document: { url: video_sd }, mimetype: "audio/mpeg", fileName: "Twitter_Audio.mp3", caption: "📥 *Audio Downloaded as Document*" }, { quoted: receivedMsg });
             break;
-
           case "5":
-            await conn.sendMessage(senderID, {
-              audio: { url: video_sd },
-              mimetype: "audio/mp4",
-              ptt: true
-            }, { quoted: receivedMsg });
+            await conn.sendMessage(senderID, { audio: { url: video_sd }, mimetype: "audio/mp4", ptt: true }, { quoted: receivedMsg });
             break;
-
           default:
             reply("❌ Invalid option! Please reply with 1, 2, 3, 4, or 5.");
         }
@@ -124,29 +95,22 @@ cmd({
   }
 });
 
-// MediaFire-dl
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 📂 MediaFire Downloader
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 cmd({
   pattern: "mediafire",
   alias: ["mfire"],
   desc: "To download MediaFire files.",
-  react: "🎥",
+  react: "📂",
   category: "download",
   filename: __filename
-}, async (conn, m, store, {
-  from,
-  quoted,
-  q,
-  reply
-}) => {
+}, async (conn, m, store, { from, quoted, q, reply }) => {
   try {
-    if (!q) {
-      return reply("❌ Please provide a valid MediaFire link.");
-    }
+    if (!q) return reply("❌ Please provide a valid MediaFire link.");
 
-    await conn.sendMessage(from, {
-      react: { text: "⏳", key: m.key }
-    });
+    await conn.sendMessage(from, { react: { text: "⏳", key: m.key } });
 
     const response = await axios.get(`https://www.dark-yasiya-api.site/download/mfire?url=${q}`);
     const data = response.data;
@@ -156,23 +120,20 @@ cmd({
     }
 
     const { dl_link, fileName, fileType } = data.result;
-    const file_name = fileName || "mediafire_download";
-    const mime_type = fileType || "application/octet-stream";
-
-    await conn.sendMessage(from, {
-      react: { text: "⬆️", key: m.key }
-    });
-
-    const caption = `╭━━━〔 *MEDIAFIRE DOWNLOADER* 〕━━━⊷\n`
-      + `┃▸ *File Name:* ${file_name}\n`
-      + `┃▸ *File Type:* ${mime_type}\n`
-      + `╰━━━⪼\n\n`
-      + `📥 *Downloading your file...*`;
+    const caption = `╭─────────────📦
+│ 🧩 *MEDIAFIRE DOWNLOADER*
+│─────────────────────
+│ 📁 *File Name:* ${fileName}
+│ 🧾 *File Type:* ${fileType}
+│─────────────────────
+│ 📥 *Downloading...*
+╰─────────────📦
+💠 *Owner:* 𝐸𝑅𝐹𝒜𝒩 𝒜𝐻𝑀𝒜𝒟`;
 
     await conn.sendMessage(from, {
       document: { url: dl_link },
-      mimetype: mime_type,
-      fileName: file_name,
+      mimetype: fileType,
+      fileName: fileName,
       caption: caption
     }, { quoted: m });
 
@@ -182,23 +143,18 @@ cmd({
   }
 });
 
-// apk-dl
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 📱 APK Downloader
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 cmd({
   pattern: "apk",
   desc: "Download APK from Aptoide.",
   category: "download",
   filename: __filename
-}, async (conn, m, store, {
-  from,
-  quoted,
-  q,
-  reply
-}) => {
+}, async (conn, m, store, { from, quoted, q, reply }) => {
   try {
-    if (!q) {
-      return reply("❌ Please provide an app name to search.");
-    }
+    if (!q) return reply("❌ Please provide an app name to search.");
 
     await conn.sendMessage(from, { react: { text: "⏳", key: m.key } });
 
@@ -211,18 +167,17 @@ cmd({
     }
 
     const app = data.datalist.list[0];
-    const appSize = (app.size / 1048576).toFixed(2); // Convert bytes to MB
+    const appSize = (app.size / 1048576).toFixed(2);
 
-    const caption = `╭━━━〔 *APK Downloader* 〕━━━┈⊷
-┃ 📦 *Name:* ${app.name}
-┃ 🏋 *Size:* ${appSize} MB
-┃ 📦 *Package:* ${app.package}
-┃ 📅 *Updated On:* ${app.updated}
-┃ 👨‍💻 *Developer:* ${app.developer.name}
-╰━━━━━━━━━━━━━━━┈⊷
+    const caption = `╭─────────────📱
+│ 🧩 *APK DOWNLOADER*
+│─────────────────────
+│ 📦 *App:* ${app.name}
+│ 📏 *Size:* ${appSize} MB
+│ 🧑‍💻 *Developer:* ${app.developer.name}
+│ 📅 *Updated:* ${app.updated}
+╰─────────────📱
 🔗 *Powered By DARKZONE-AI*`;
-
-    await conn.sendMessage(from, { react: { text: "⬆️", key: m.key } });
 
     await conn.sendMessage(from, {
       document: { url: app.file.path_alt },
@@ -231,55 +186,55 @@ cmd({
       caption: caption
     }, { quoted: m });
 
-    await conn.sendMessage(from, { react: { text: "✅", key: m.key } });
-
   } catch (error) {
     console.error("Error:", error);
     reply("❌ An error occurred while fetching the APK. Please try again.");
   }
 });
 
-// G-Drive-DL
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ☁️ Google Drive Downloader
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 cmd({
   pattern: "gdrive",
   desc: "Download Google Drive files.",
-  react: "🌐",
+  react: "☁️",
   category: "download",
   filename: __filename
-}, async (conn, m, store, {
-  from,
-  quoted,
-  q,
-  reply
-}) => {
+}, async (conn, m, store, { from, quoted, q, reply }) => {
   try {
-    if (!q) {
-      return reply("❌ Please provide a valid Google Drive link.");
-    }
+    if (!q) return reply("❌ Please provide a valid Google Drive link.");
 
     await conn.sendMessage(from, { react: { text: "⬇️", key: m.key } });
 
     const apiUrl = `https://api.fgmods.xyz/api/downloader/gdrive?url=${q}&apikey=mnp3grlZ`;
     const response = await axios.get(apiUrl);
-    const downloadUrl = response.data.result.downloadUrl;
+    const result = response.data.result;
 
-    if (downloadUrl) {
-      await conn.sendMessage(from, { react: { text: "⬆️", key: m.key } });
-
-      await conn.sendMessage(from, {
-        document: { url: downloadUrl },
-        mimetype: response.data.result.mimetype,
-        fileName: response.data.result.fileName,
-        caption: "*𝐸𝑅𝐹𝒜𝒩 𝒜𝐻𝑀𝒜𝒟 💔*"
-      }, { quoted: m });
-
-      await conn.sendMessage(from, { react: { text: "✅", key: m.key } });
-    } else {
+    if (!result || !result.downloadUrl) {
       return reply("⚠️ No download URL found. Please check the link and try again.");
     }
+
+    const caption = `╭─────────────☁️
+│ 🧩 *GOOGLE DRIVE DOWNLOADER*
+│─────────────────────
+│ 📁 *File Name:* ${result.fileName}
+│ 🧾 *Type:* ${result.mimetype}
+│─────────────────────
+│ 📥 *Downloading...*
+╰─────────────☁️
+💠 *Owner:* 𝐸𝑅𝐹𝒜𝒩 𝒜𝐻𝑀𝒜𝒟 💎`;
+
+    await conn.sendMessage(from, {
+      document: { url: result.downloadUrl },
+      mimetype: result.mimetype,
+      fileName: result.fileName,
+      caption: caption
+    }, { quoted: m });
+
   } catch (error) {
     console.error("Error:", error);
     reply("❌ An error occurred while fetching the Google Drive file. Please try again.");
   }
-}); 
+});
