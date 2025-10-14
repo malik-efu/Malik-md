@@ -26,7 +26,7 @@ function writeState(state) {
 
 // ----- Command -----
 cmd({
-    pattern: 'anticall',
+    pattern: 'antical',
     alias: ['blockcall', 'antcall'],
     desc: 'Auto block when someone calls bot',
     category: 'owner',
