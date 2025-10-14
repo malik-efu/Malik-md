@@ -21,6 +21,9 @@ function writeState(enabled) {
     } catch {}
 }
 
+// ========================
+// 🔹 Command: .anticall
+// ========================
 cmd({
     pattern: "anticall",
     alias: ["antcall", "blockcall"],
@@ -56,4 +59,29 @@ cmd({
     }
 });
 
-module.exports = { readState };
+// ========================
+// 🔹 Event: Reject incoming calls
+// ========================
+module.exports = async function anticallHandler(conn, update) {
+    try {
+        const state = readState();
+        if (!state.enabled) return;
+
+        if (update && update[0] && update[0].content && update[0].content[0]) {
+            const call = update[0].content[0];
+            if (call.tag === 'offer') {
+                const callerJid = update[0].attrs.from;
+                console.log(`🚫 Incoming call detected from: ${callerJid}`);
+
+                // Reject the call
+                await conn.rejectCall(callerJid, call.attrs['call-id']);
+                console.log(`📵 Call rejected automatically from ${callerJid}`);
+
+                // Optional: send a message to the caller
+                await conn.sendMessage(callerJid, { text: `🚫 Please don't call the bot. Your call was rejected automatically.` });
+            }
+        }
+    } catch (err) {
+        console.error('❌ Error handling call:', err);
+    }
+};
