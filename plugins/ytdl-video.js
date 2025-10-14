@@ -1,6 +1,7 @@
 const config = require('../config');
 const { cmd } = require('../command');
 const yts = require('yt-search');
+const fetch = require('node-fetch');
 
 cmd({
     pattern: "video2",
@@ -15,7 +16,7 @@ cmd({
         if (!q) return await reply("❌ Please provide a video name or YouTube URL!");
 
         let videoUrl, title;
-        
+
         // Check if it's a URL
         if (q.match(/(youtube\.com|youtu\.be)/)) {
             videoUrl = q;
@@ -31,8 +32,15 @@ cmd({
 
         await reply("⏳ Downloading video...");
 
-        // Use API to get video
-        const apiUrl = `https://apis.davidcyriltech.my.id/download/ytmp4?url=${encodeURIComponent(videoUrl)}`;
+        // Fetch API key from GitHub
+        const keyRes = await fetch('https://raw.githubusercontent.com/MOHAMMAD-NAYAN-07/Nayan/main/api.json');
+        const keyData = await keyRes.json();
+        const apiKey = keyData.api_key || keyData.key || keyData.API_KEY; // auto-detect key field
+
+        if (!apiKey) return await reply("❌ API key not found in JSON!");
+
+        // Use the new API with your key
+        const apiUrl = `https://api.nayan.download/ytmp4?url=${encodeURIComponent(videoUrl)}&apikey=${apiKey}`;
         const response = await fetch(apiUrl);
         const data = await response.json();
 
