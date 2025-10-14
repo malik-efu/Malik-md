@@ -1,84 +1,122 @@
-const { cmd } = require('../command');
-const fs = require('fs');
-const path = require('path');
-
-const dataFile = path.join(__dirname, '../data/grpPrefix.json');
-
-// Helper functions to read/write prefix data
-function readPrefixes() {
-    try {
-        if (!fs.existsSync(dataFile)) return {};
-        const raw = fs.readFileSync(dataFile, 'utf8');
-        return JSON.parse(raw || '{}');
-    } catch {
-        return {};
-    }
-}
-
-function writePrefixes(prefixes) {
-    try {
-        const dir = path.dirname(dataFile);
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(dataFile, JSON.stringify(prefixes, null, 2));
-        return true;
-    } catch {
-        return false;
-    }
-}
+const axios = require('axios');
+const { cmd, commands } = require('../command');
+const config = require('../config');
 
 cmd({
-    pattern: "prefi",
-    alias: ["currentprefix"],
-    react: "🔰",
-    desc: "Display or set bot prefix",
+    pattern: "help",
+    alias: ["commands", "menu"],
+    react: "📖",
+    desc: "Lists all available commands by category",
     category: "utility",
-    use: ".prefix or .prefix set <symbol>",
+    use: ".help or .help <command>",
     filename: __filename
-}, async (conn, mek, m, { from, isGroup, isAdmins, q, reply, prefix }) => {
+}, async (conn, mek, m, { from, q, reply, prefix }) => {
     try {
-        const prefixes = readPrefixes();
-        const args = q ? q.split(' ') : [];
+        // Get all commands
+        const getAllCommands = () => commands.map(cmd => cmd);
+        const allCommands = getAllCommands();
 
-        // Show current prefix
-        if (!args[0]) {
-            const globalPrefix = prefix;
-            const groupPrefix = prefixes[from];
+        // Category merging
+        const mergedCategories = {
+            "🛡️ Bot Control": ["Administration", "Admin", "Owner", "Bot Management", "System"],
+            "🛠️ Utility": ["Utility", "Utilities", "system"],
+            "🎬 Media": ["Media", "media", "video", "image"],
+            "👥 Group Management": ["Group Management", "group"],
+            "🤖 AI": ["AI", "AI Chat"],
+            "🎉 Fun": ["Fun", "Games", "greetings"],
+            "🔧 Tools": ["Tools", "Information"],
+            "📥 Download": ["download", "downloader"]
+        };
 
-            if (isGroup) {
+        const categories = {};
+
+        allCommands.forEach((cmd) => {
+            let cat = cmd.category || "📦 Uncategorized";
+
+            // Merge similar categories
+            for (const merged in mergedCategories) {
+                if (mergedCategories[merged].includes(cat)) {
+                    cat = merged;
+                    break;
+                }
+            }
+
+            if (!categories[cat]) categories[cat] = [];
+            categories[cat].push(cmd);
+        });
+
+        // Show specific command help
+        if (q) {
+            const command = allCommands.find((cmd) => 
+                cmd.pattern.toLowerCase() === q.toLowerCase() || 
+                (cmd.alias && cmd.alias.includes(q.toLowerCase()))
+            );
+            
+            if (command) {
                 return reply(
-                    `🔰 Prefix Information:\n\n` +
-                    `🌍 Global Prefix: \`${globalPrefix}\`\n` +
-                    `👥 Group Prefix: \`${groupPrefix || "Not set (using global)"}\``
+                    `╭━━━〔 *📖 Command Info* 〕━━━╮\n` +
+                    `┃ 🔹 Name: ${command.pattern}\n` +
+                    `┃ 🔹 Aliases: ${command.alias ? command.alias.join(", ") : "None"}\n` +
+                    `┃ 🔹 Description: ${command.desc || "No description"}\n` +
+                    `┃ 🔹 Usage: ${command.use || "No usage specified"}\n` +
+                    `┃ 🔹 Category: ${command.category || "Uncategorized"}\n` +
+                    `┃ 🔹 React: ${command.react || "None"}\n` +
+                    `╰━━━━━━━━━━━━━━━━━━━━━━╯`
                 );
             } else {
-                return reply(`🌍 My current prefix is: \`${globalPrefix}\``);
+                return reply(`⚠️ No command found with the name "${q}".`);
             }
         }
 
-        // Set prefix
-        if (args[0].toLowerCase() === "set") {
-            if (!isGroup) {
-                return reply("❌ This command can only be used in groups.");
-            }
-            if (!isAdmins) {
-                return reply("❌ Only group admins can set prefix.");
-            }
-            if (!args[1]) {
-                return reply("❌ Please provide a prefix to set.\nExample: .prefix set !");
-            }
+        // Show main help menu
+        let responseText = `
+╔══════════════════════╗
+     ✨ *${config.botName || 'Knight Bot'}* ✨
+╚══════════════════════╝
 
-            const newPrefix = args[1];
-            prefixes[from] = newPrefix;
+👑 Owner: ${config.owner || 'Unknown Owner'}
+🔰 Prefix: ${prefix}
+📊 Total Commands: ${allCommands.length}
 
-            if (writePrefixes(prefixes)) {
-                return reply(`✅ Prefix updated for this group.\n👉 New Prefix: \`${newPrefix}\``);
+`;
+
+        // Add categories and commands
+        for (const category in categories) {
+            const categoryCommands = categories[category]
+                .map(cmd => `   ⤷ ${prefix}${cmd.pattern}`)
+                .join("\n");
+
+            responseText += `
+╔══════════════════════╗
+📂 *${category}* (${categories[category].length})
+${categoryCommands}
+╚══════════════════════╝
+`;
+        }
+
+        responseText += `\n📖 Use *${prefix}help <command>* for more info about a specific command.`;
+
+        // Try to send with image if available
+        try {
+            if (config.helpImage) {
+                await conn.sendMessage(from, {
+                    image: { url: config.helpImage },
+                    caption: responseText
+                }, { quoted: m });
             } else {
-                return reply("❌ Failed to save prefix. Please try again.");
+                await conn.sendMessage(from, {
+                    text: responseText
+                }, { quoted: m });
             }
+        } catch (error) {
+            console.error('Help Image Error:', error);
+            await conn.sendMessage(from, {
+                text: responseText
+            }, { quoted: m });
         }
 
     } catch (error) {
-        console.error('Prefix Command Error:', error);
-        reply("❌ An error occurred while processing prefix command.");
+        console.error('Help Command Error:', error);
+        reply("❌ An error occurred while generating help menu.");
     }
 });
