@@ -1,61 +1,120 @@
-const { cmd } = require('../command');
 const axios = require('axios');
+const cheerio = require('cheerio');
+const { cmd } = require('../command');
 
+// Twitter Scraper Function
+async function twitterScraper(url) {
+    return new Promise(async (resolve, reject) => {
+        try {
+            const twitterUrlMatch = url.match(/(https:\/\/x.com\/[^?]+)/)
+            const tMatch = url.match(/t=([^&]+)/)
+            const twitterUrl = twitterUrlMatch ? twitterUrlMatch[1] : ''
+            const t = tMatch ? tMatch[1] : ''
+            const urlnya = encodeURIComponent(`${twitterUrl}?t=${t}&s=19`)
+            
+            const response = await axios.post("https://savetwitter.net/api/ajaxSearch",
+                `q=${urlnya}&lang=en`)
+            
+            const $ = cheerio.load(response.data.data)
+            const isVideo = $('.tw-video').length > 0
+            const twitterId = $('#TwitterId').val()
+            
+            if (isVideo) {
+                const videoThumbnail = $('.tw-video .thumbnail .image-tw img').attr('src')
+                const data = []
+                
+                $('.dl-action a').each((i, elem) => {
+                    const quality = $(elem).text().trim()
+                    const url = $(elem).attr('href')
+                    
+                    if ($(elem).hasClass('action-convert')) {
+                        const audioUrl = $(elem).attr('data-audioUrl')
+                        data.push({
+                            quality: quality,
+                            url: audioUrl || 'URL not found',
+                        })
+                    } else {
+                        data.push({
+                            quality: quality,
+                            url: url
+                        })
+                    }
+                })
+                
+                const title = $('.tw-middle h3').text().trim()
+                const videoDuration = $('.tw-middle p').text().trim()
+                
+                resolve({
+                    status: true,
+                    data: {
+                        type: "video",
+                        title: title,
+                        duration: videoDuration,
+                        twitterId: twitterId,
+                        videoThumbnail: videoThumbnail,
+                        dl: data
+                    }
+                })
+            } else {
+                const imageUrl = $('.photo-list .download-items__thumb img').attr('src')
+                const downloadUrl = $('.photo-list .download-items__btn a').attr('href')
+                
+                resolve({
+                    status: true,
+                    data: {
+                        type: "image",
+                        twitterId: twitterId,
+                        imageUrl: imageUrl,
+                        dl: downloadUrl
+                    }
+                })
+            }
+        } catch (error) {
+            reject(error)
+        }
+    })
+}
+
+// Twitter Download Command
 cmd({
-    pattern: "pindl",
-    alias: ["pinterestdl", "pin", "pins", "pindownload"],
-    desc: "Download media from Pinterest",
+    pattern: "twitte",
+    alias: ["x", "xdl"],
+    react: "🐦",
+    desc: "Download Twitter/X videos and images",
     category: "download",
+    use: ".twitter <twitter-url>",
     filename: __filename
-}, async (conn, mek, m, { args, quoted, from, reply }) => {
+}, async (conn, mek, m, { from, q, reply }) => {
     try {
-        // Make sure the user provided the Pinterest URL
-        if (args.length < 1) {
-            return reply('❎ Please provide the Pinterest URL to download from.');
+        if (!q) {
+            return reply(`❌ You forgot the Twitter/X image/video link.`)
         }
 
-        // Extract Pinterest URL from the arguments
-        const pinterestUrl = args[0];
+        await reply("🕒 Downloading from Twitter...")
 
-        // Call your Pinterest download API
-        const response = await axios.get(`https://api.giftedtech.web.id/api/download/pinterestdl?apikey=gifted&url=${encodeURIComponent(pinterestUrl)}`);
-
-        if (!response.data.success) {
-            return reply('❎ Failed to fetch data from Pinterest.');
+        const result = await twitterScraper(q);
+        
+        if (!result.status) {
+            return reply(`❌ Could not get content from Twitter`)
         }
 
-        const media = response.data.result.media;
-        const description = response.data.result.description || 'No description available'; // Check if description exists
-        const title = response.data.result.title || 'No title available';
-
-        // Select the best video quality or you can choose based on size or type
-        const videoUrl = media.find(item => item.type.includes('720p'))?.download_url || media[0].download_url;
-
-        // Prepare the new message with the updated caption
-        const desc = `╭━━━〔 *DARKZONE-MD* 〕━━━┈⊷
-┃▸╭───────────
-┃▸┃๏ *PINS DOWNLOADER*
-┃▸└───────────···๏
-╰────────────────┈⊷
-╭━━❐━⪼
-┇๏ *Title* - ${title}
-┇๏ *Media Type* - ${media[0].type}
-╰━━❑━⪼
-> *𝐸𝑅𝐹𝒜𝒩 𝒜𝐻𝑀𝒜𝒟*`;
-
-        // Send the media (video or image) to the user
-        if (documentUrl) {
-            // If it's a video, send the video
-            await conn.sendMessage(from, { document: { url: documentUrl }, caption: desc }, { quoted: mek });
+        if (result.data.type === 'video') {
+            let caption = `❀ Twitter - Download ❀\n\n> ✦ Title » ${result.data.title}\n> ⴵ Duration » ${result.data.duration}\n> 🜸 URL » ${q}`
+            
+            await conn.sendMessage(from, {
+                video: { url: result.data.dl[0].url },
+                caption: caption
+            }, { quoted: m })
+            
         } else {
-            // If it's an image, send the image
-            const imageUrl = media.find(item => item.type === 'Thumbnail')?.download_url;
-            await conn.sendMessage(from, { image: { url: imageUrl }, caption: desc }, { quoted: mek });
+            await conn.sendMessage(from, {
+                image: { url: result.data.imageUrl },
+                caption: `❀ Twitter - Download ❀\n\n> 🜸 URL » ${q}`
+            }, { quoted: m })
         }
 
     } catch (e) {
-        console.error(e);
-        await conn.sendMessage(from, { react: { text: '❌', key: mek.key } });
-        reply('❎ An error occurred while processing your request.');
+        console.error('Twitter Download Error:', e)
+        reply(`⚠️ A problem occurred.\n\n${e.message}`)
     }
-});
+})
