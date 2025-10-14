@@ -1,82 +1,154 @@
+// plugins/anticall.js
 const fs = require('fs');
-const { cmd } = require('../command');
+const PATH = './data/anticall.json';
 
-const DATA_PATH = './data/anticall.json';
-
-// Read current state
+// read/write state
 function readState() {
-    try {
-        if (!fs.existsSync(DATA_PATH)) return { enabled: false };
-        const raw = fs.readFileSync(DATA_PATH, 'utf8');
-        return JSON.parse(raw);
-    } catch {
-        return { enabled: false };
-    }
+  try {
+    if (!fs.existsSync(PATH)) return { enabled: false };
+    const raw = fs.readFileSync(PATH, 'utf8') || '{}';
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error('readState error', e);
+    return { enabled: false };
+  }
+}
+function writeState(obj) {
+  try {
+    if (!fs.existsSync('./data')) fs.mkdirSync('./data', { recursive: true });
+    fs.writeFileSync(PATH, JSON.stringify(obj, null, 2));
+  } catch (e) { console.error('writeState error', e); }
 }
 
-// Write new state
-function writeState(state) {
-    try {
-        if (!fs.existsSync('./data')) fs.mkdirSync('./data', { recursive: true });
-        fs.writeFileSync(DATA_PATH, JSON.stringify(state, null, 2));
-    } catch (err) {
-        console.error('Error writing anticall state:', err);
-    }
+// optional simple command integration (adjust to your cmd() wrapper signature)
+async function anticallCommandReply(conn, isOwner, text, reply) {
+  if (!isOwner) return reply('❌ Only owner can use this.');
+  const arg = (text || '').trim().toLowerCase();
+  if (!['on','off','status'].includes(arg)) {
+    return reply('Usage: .anticall on|off|status');
+  }
+  if (arg === 'status') {
+    const s = readState();
+    return reply(`Anticall is ${s.enabled ? 'ON' : 'OFF'}`);
+  }
+  writeState({ enabled: arg === 'on' });
+  return reply(`Anticall ${arg === 'on' ? 'ENABLED' : 'DISABLED'}`);
 }
 
-// ----- Command -----
-cmd({
-    pattern: 'antical',
-    alias: ['blockcall', 'antcall'],
-    desc: 'Auto block when someone calls bot',
-    category: 'owner',
-    use: '.anticall on/off/status',
-    react: '📵',
-    filename: __filename
-}, async (conn, mek, m, { q, reply, isOwner }) => {
-    if (!isOwner) return reply('❌ Only owner can use this command.');
-
-    const sub = (q || '').trim().toLowerCase();
-    const current = readState();
-
-    if (!['on', 'off', 'status'].includes(sub)) {
-        return reply(`📵 *ANTICALL OPTIONS*\n\n.anticall on - Enable\n.anticall off - Disable\n.anticall status - Show status`);
-    }
-
-    if (sub === 'status') return reply(`📵 Anticall is *${current.enabled ? 'ON' : 'OFF'}*`);
-
-    const newState = { enabled: sub === 'on' };
-    writeState(newState);
-    reply(`📵 Anticall has been *${newState.enabled ? 'ENABLED' : 'DISABLED'}*.`);
-});
-
-// ----- Event Listener for Incoming Calls -----
-async function handleCall(sock, update) {
+// The core: normalize different call event shapes and handle them
+async function handleRawCallEvent(sock, raw) {
+  // raw can be:
+  // - an array from sock.ev.on('call', calls) where each item is { id, from, status, ... }
+  // - an object from sock.ws.on('CB:call', json) where json.content[0] exists (older)
+  // - other shapes on forks — we attempt to normalize
+  try {
     const state = readState();
     if (!state.enabled) return;
 
-    for (const call of update) {
-        if (call.status === 'offer') {
-            const caller = call.from;
-            const callId = call.id;
-            console.log('📞 Incoming call detected from', caller);
+    // helper to handle a normalized call entry
+    async function handle(call) {
+      try {
+        // normalized expected fields: call.id, call.from, call.status
+        const callId = call.id || call['call-id'] || (call.attrs && call.attrs['call-id']);
+        const from = call.from || call.fromJid || (call.attrs && call.attrs.from) || call.fromJid;
+        const status = call.status || call.tag || (call.type) || (call.attrs && call.attrs.status) || '';
 
-            try {
-                // Reject the call
-                await sock.rejectCall(callId, caller);
-                console.log(`📵 Rejected call from ${caller}`);
-
-                // Block the caller
-                await sock.updateBlockStatus(caller, 'block');
-                console.log(`🚷 Blocked ${caller}`);
-
-                // Warn them (optional)
-                await sock.sendMessage(caller, { text: '🚫 Do not call this bot. You have been blocked automatically.' });
-            } catch (err) {
-                console.error('Anticall error:', err);
-            }
+        if (!callId || !from) {
+          console.log('anticall: unknown call shape, skipping', call);
+          return;
         }
+
+        // only act on incoming offers
+        const isOffer = (status && typeof status === 'string' && status.toLowerCase().includes('offer')) ||
+                        (status === 'offer') || (status === 'inbound') || (call.tag === 'offer');
+
+        if (!isOffer) {
+          console.log('anticall: not an offer, status=', status);
+          return;
+        }
+
+        console.log('📞 Anticall: incoming call detected from', from, 'callId:', callId);
+
+        // 1) reject call
+        if (typeof sock.rejectCall === 'function') {
+          try {
+            await sock.rejectCall(callId, from);
+            console.log('📵 Anticall: rejected call from', from);
+          } catch (e) {
+            console.warn('anticall: rejectCall failed', e && e.message || e);
+          }
+        } else {
+          console.warn('anticall: sock.rejectCall() not available on this Baileys instance');
+        }
+
+        // 2) block caller
+        if (typeof sock.updateBlockStatus === 'function') {
+          try {
+            await sock.updateBlockStatus(from, 'block'); // 'block' or true depending on fork; this form is common
+            console.log('🚷 Anticall: blocked', from);
+          } catch (e) {
+            // some forks expect boolean true/false:
+            try {
+              await sock.updateBlockStatus(from, true);
+              console.log('🚷 Anticall: blocked (fallback boolean) ', from);
+            } catch (e2) {
+              console.warn('anticall: updateBlockStatus failed', e && e.message || e2 && e2.message || e2);
+            }
+          }
+        } else {
+          console.warn('anticall: sock.updateBlockStatus() not available on this Baileys instance');
+        }
+
+        // 3) try to send a message (optional; ignore if fails)
+        try {
+          if (typeof sock.sendMessage === 'function') {
+            await sock.sendMessage(from, { text: '🚫 Do not call this bot. You have been blocked.' });
+          }
+        } catch {}
+
+      } catch (err) {
+        console.error('anticall: handle(call) error', err);
+      }
     }
+
+    // If raw is an array of calls
+    if (Array.isArray(raw)) {
+      for (const c of raw) {
+        // some arrays include wrapper { id, from, status } or full objects
+        await handle(c);
+      }
+      return;
+    }
+
+    // If raw looks like CB:call websocket shape: { content: [ { attrs:..., tag: 'offer' } ] }
+    if (raw && raw.content && Array.isArray(raw.content) && raw.content.length) {
+      for (const item of raw.content) {
+        // item may include attrs/from/tag
+        const normalized = {
+          id: item.attrs && item.attrs['call-id'] || item.id,
+          from: item.attrs && item.attrs.from,
+          status: item.tag || (item.attrs && item.attrs.status)
+        };
+        await handle(normalized);
+      }
+      return;
+    }
+
+    // If raw is a single object with fields
+    if (raw && typeof raw === 'object') {
+      await handle(raw);
+      return;
+    }
+
+    console.log('anticall: unknown event format', typeof raw, raw);
+  } catch (err) {
+    console.error('anticall: overall handler error', err);
+  }
 }
 
-module.exports = { handleCall };
+module.exports = {
+  readState,
+  writeState,
+  anticallCommandReply,
+  handleRawCallEvent
+};
