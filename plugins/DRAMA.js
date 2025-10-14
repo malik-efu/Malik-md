@@ -1,132 +1,153 @@
 const axios = require('axios');
 const { cmd } = require('../command');
 
-// Fixed Twitter Scraper Function
-async function twitterScraper(url) {
-    try {
-        // Use a reliable Twitter download API
-        const apiUrl = `https://twitsave.com/info?url=${encodeURIComponent(url)}`;
-        const response = await axios.get(apiUrl);
-        
-        if (!response.data || !response.data.media || response.data.media.length === 0) {
-            throw new Error('No media found in this tweet');
-        }
+let enviando = false;
 
-        const media = response.data.media[0];
-        
-        if (media.type === 'video') {
-            return {
-                status: true,
-                data: {
-                    type: "video",
-                    title: response.data.text || 'Twitter Video',
-                    duration: media.duration || 'Unknown',
-                    dl: [{ quality: 'HD', url: media.url }]
-                }
-            }
-        } else if (media.type === 'image') {
-            return {
-                status: true,
-                data: {
-                    type: "image",
-                    imageUrl: media.url
-                }
-            }
-        } else {
-            throw new Error('Unsupported media type');
-        }
-        
-    } catch (error) {
-        throw new Error('Failed to download from Twitter: ' + error.message);
-    }
-}
+const _twitterapi = (id) => `https://info.tweeload.site/status/${id}.json`;
 
-// Alternative Twitter Scraper (Backup)
-async function twitterScraperBackup(url) {
-    try {
-        const apiUrl = `https://api.twittervideodownloader.com/twitter/video?url=${encodeURIComponent(url)}`;
-        const response = await axios.get(apiUrl);
-        
-        if (response.data && response.data.video) {
-            return {
-                status: true,
-                data: {
-                    type: "video",
-                    title: 'Twitter Video',
-                    duration: 'Unknown',
-                    dl: [{ quality: 'HD', url: response.data.video }]
-                }
-            }
-        }
-        throw new Error('No video found');
-    } catch (error) {
-        throw new Error('Backup API also failed');
-    }
-}
+const getAuthorization = async () => {
+    const { data } = await axios.get("https://pastebin.com/raw/SnCfd4ru");
+    return data;
+};
 
-// Twitter Download Command
+const TwitterDL = async (url) => {
+  return new Promise(async (resolve, reject) => {
+    const id = url.match(/\/([\d]+)/);
+    if (!id)
+      return resolve({
+        status: "error",
+        message: "❌ Invalid Twitter/X URL format",
+      });
+      
+      const response = await axios(_twitterapi(id[1]), {
+        method: "GET",
+        headers: {
+          Authorization: await getAuthorization(),
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.132 Safari/537.36",
+        },
+      });
+
+      if (response.data.code !== 200) {
+        return resolve({
+          status: "error",
+          message: "❌ Failed to fetch tweet data",
+        });
+      }
+
+      const author = {
+        id: response.data.tweet.author.id,
+        name: response.data.tweet.author.name,
+        username: response.data.tweet.author.screen_name,
+        avatar_url: response.data.tweet.author.avatar_url,
+        banner_url: response.data.tweet.author.banner_url,
+      };
+
+      let media = [];
+      let type;
+
+      if (response.data.tweet?.media?.videos) {
+        type = "video";
+        response.data.tweet.media.videos.forEach((v) => {
+          const resultVideo = [];
+          v.video_urls.forEach((z) => {
+            resultVideo.push({
+              bitrate: z.bitrate,
+              content_type: z.content_type,
+              resolution: z.url.match(/([\d ]{2,5}[x][\d ]{2,5})/)[0],
+              url: z.url,
+            });
+          });
+          if (resultVideo.length !== 0) {
+            media.push({
+              type: v.type,
+              duration: v.duration,
+              thumbnail_url: v.thumbnail_url,
+              result: v.type === "video" ? resultVideo : v.url,
+            });
+          }
+        });
+      } else {
+        type = "photo";
+        response.data.tweet.media.photos.forEach((v) => {
+          media.push(v);
+        });
+      }
+
+      resolve({
+        status: "success",
+        result: {
+          id: response.data.tweet.id,
+          caption: response.data.tweet.text,
+          created_at: response.data.tweet.created_at,
+          created_timestamp: response.data.tweet.created_timestamp,
+          replies: response.data.tweet.replies,
+          retweets: response.data.tweet.retweets,
+          likes: response.data.tweet.likes,
+          url: response.data.tweet.url,
+          possibly_sensitive: response.data.tweet.possibly_sensitive,
+          author,
+          type,
+          media: media.length !== 0 ? media : null,
+        },
+      });
+  });
+};
+
 cmd({
-    pattern: "twitte",
-    alias: ["x", "xdl"],
+    pattern: "x",
+    alias: ["xdl", "dlx", "twdl", "tw", "twt", "twitter"],
     react: "🐦",
-    desc: "Download Twitter/X videos and images",
+    desc: "Download videos/images from Twitter/X",
     category: "download",
-    use: ".twitter <twitter-url>",
+    use: ".x <twitter-url>",
     filename: __filename
-}, async (conn, mek, m, { from, q, reply }) => {
+}, async (conn, mek, m, { from, text, q, reply }) => {
     try {
-        if (!q) {
-            return reply(`❌ Please provide a Twitter/X URL\nExample: .twitter https://x.com/user/status/123456`);
-        }
-
-        // Validate Twitter URL
-        if (!q.includes('x.com/') && !q.includes('twitter.com/')) {
-            return reply(`❌ Invalid Twitter/X URL\nMust be from x.com or twitter.com`);
-        }
-
-        await reply("🕒 Downloading from Twitter...");
-
-        let result;
+        const url = q || text;
         
-        // Try main API first
-        try {
-            result = await twitterScraper(q);
-        } catch (error) {
-            // Try backup API
-            console.log('Main API failed, trying backup...');
-            result = await twitterScraperBackup(q);
+        if (!url) {
+            return reply("❌ Please provide a Twitter/X URL\nExample: .x https://twitter.com/auronplay/status/1586487664274206720");
         }
 
-        if (!result.status) {
-            return reply(`❌ Could not download from Twitter\n• Link may be invalid\n• Tweet may be private\n• Try again later`);
+        if (enviando) return reply("⏳ Please wait, previous download is still processing...");
+        enviando = true;
+
+        await reply("⏳ Downloading from Twitter/X...");
+
+        const res = await TwitterDL(url);
+        
+        if (res?.status === "error") {
+            throw new Error(res.message);
         }
 
-        if (result.data.type === 'video') {
-            const caption = `🐦 *Twitter Video*\n\n📹 Title: ${result.data.title}\n⏱️ Duration: ${result.data.duration}\n🔗 URL: ${q}\n\n📥 Downloaded by Knight Bot`;
+        if (res?.result.type == 'video') {
+            const caption = res?.result.caption ? res.result.caption : "🐦 *Twitter/X Video*";
+            for (let i = 0; i < res.result.media.length; i++) {
+                await conn.sendMessage(from, {
+                    video: { url: res.result.media[i].result[0].url }, 
+                    caption: caption
+                }, { quoted: m });
+            };
+            enviando = false;
+            return;
             
-            await conn.sendMessage(from, {
-                video: { url: result.data.dl[0].url },
-                caption: caption
-            }, { quoted: m });
-            
-        } else {
-            await conn.sendMessage(from, {
-                image: { url: result.data.imageUrl },
-                caption: `🐦 *Twitter Image*\n\n🔗 URL: ${q}\n\n📥 Downloaded by Knight Bot`
-            }, { quoted: m });
+        } else if (res?.result.type == 'photo') {
+            const caption = res?.result.caption ? res.result.caption : "🐦 *Twitter/X Image*";
+            for (let i = 0; i < res.result.media.length; i++) {
+                await conn.sendMessage(from, {
+                    image: { url: res.result.media[i].url }, 
+                    caption: caption
+                }, { quoted: m });
+            };
+            enviando = false;
+            return;
         }
+
+        throw new Error("❌ No media found in this tweet");
 
     } catch (error) {
-        console.error('Twitter Download Error:', error);
-        
-        if (error.message.includes('No media found')) {
-            reply('❌ No video or image found in this tweet');
-        } else if (error.message.includes('Invalid')) {
-            reply('❌ Invalid Twitter URL');
-        } else if (error.message.includes('private')) {
-            reply('❌ Cannot download from private tweets');
-        } else {
-            reply(`❌ Failed to download: ${error.message}\n\nTry a different Twitter link.`);
-        }
+        enviando = false;
+        console.error('Twitter/X Download Error:', error);
+        reply(`❌ Failed to download: ${error.message}`);
     }
 });
