@@ -1,90 +1,82 @@
 const fs = require('fs');
 const { cmd } = require('../command');
 
-const ANTICALL_PATH = './data/anticall.json';
+const DATA_PATH = './data/anticall.json';
 
-// ----- Read/Write State -----
+// Read current state
 function readState() {
     try {
-        if (!fs.existsSync(ANTICALL_PATH)) return { enabled: false };
-        const data = JSON.parse(fs.readFileSync(ANTICALL_PATH, 'utf8'));
-        return { enabled: !!data.enabled };
+        if (!fs.existsSync(DATA_PATH)) return { enabled: false };
+        const raw = fs.readFileSync(DATA_PATH, 'utf8');
+        return JSON.parse(raw);
     } catch {
         return { enabled: false };
     }
 }
 
-function writeState(enabled) {
+// Write new state
+function writeState(state) {
     try {
         if (!fs.existsSync('./data')) fs.mkdirSync('./data', { recursive: true });
-        fs.writeFileSync(ANTICALL_PATH, JSON.stringify({ enabled: !!enabled }, null, 2));
-    } catch (e) {
-        console.error('WriteState Error:', e);
+        fs.writeFileSync(DATA_PATH, JSON.stringify(state, null, 2));
+    } catch (err) {
+        console.error('Error writing anticall state:', err);
     }
 }
 
 // ----- Command -----
 cmd({
-    pattern: "anticall",
-    alias: ["antcall", "blockcall"],
-    react: "📵",
-    desc: "Auto-block incoming calls",
-    category: "owner",
-    use: ".anticall <on/off/status>",
+    pattern: 'anticall',
+    alias: ['blockcall', 'antcall'],
+    desc: 'Auto block when someone calls bot',
+    category: 'owner',
+    use: '.anticall on/off/status',
+    react: '📵',
     filename: __filename
-}, async (conn, mek, m, { from, q, reply, isOwner }) => {
-    if (!isOwner) return reply("❌ Only owner can use this command.");
+}, async (conn, mek, m, { q, reply, isOwner }) => {
+    if (!isOwner) return reply('❌ Only owner can use this command.');
 
-    const state = readState();
     const sub = (q || '').trim().toLowerCase();
+    const current = readState();
 
     if (!['on', 'off', 'status'].includes(sub)) {
-        return reply(`📵 *ANTICALL OPTIONS*\n\n.anticall on - Enable auto-block\n.anticall off - Disable auto-block\n.anticall status - Show current status`);
+        return reply(`📵 *ANTICALL OPTIONS*\n\n.anticall on - Enable\n.anticall off - Disable\n.anticall status - Show status`);
     }
 
-    if (sub === 'status') {
-        return reply(`📵 Anticall is *${state.enabled ? 'ON' : 'OFF'}*`);
-    }
+    if (sub === 'status') return reply(`📵 Anticall is *${current.enabled ? 'ON' : 'OFF'}*`);
 
-    const enable = sub === 'on';
-    writeState(enable);
-    reply(`📵 Anticall has been *${enable ? 'ENABLED' : 'DISABLED'}*.`);
+    const newState = { enabled: sub === 'on' };
+    writeState(newState);
+    reply(`📵 Anticall has been *${newState.enabled ? 'ENABLED' : 'DISABLED'}*.`);
 });
 
-// ----- Event: Call Detector -----
-async function handleIncomingCall(sock, call) {
+// ----- Event Listener for Incoming Calls -----
+async function handleCall(sock, update) {
     const state = readState();
     if (!state.enabled) return;
 
-    const callerJid = call.attrs.from;
-    const callId = call.attrs['call-id'];
-    const callType = call.tag; // usually "offer"
+    for (const call of update) {
+        if (call.status === 'offer') {
+            const caller = call.from;
+            const callId = call.id;
+            console.log('📞 Incoming call detected from', caller);
 
-    if (callType === 'offer') {
-        console.log(`🚫 Incoming call detected from: ${callerJid}`);
+            try {
+                // Reject the call
+                await sock.rejectCall(callId, caller);
+                console.log(`📵 Rejected call from ${caller}`);
 
-        // Reject the call
-        try {
-            await sock.rejectCall(callId, callerJid);
-            console.log(`📵 Rejected call from ${callerJid}`);
-        } catch (err) {
-            console.error('RejectCall error:', err.message);
+                // Block the caller
+                await sock.updateBlockStatus(caller, 'block');
+                console.log(`🚷 Blocked ${caller}`);
+
+                // Warn them (optional)
+                await sock.sendMessage(caller, { text: '🚫 Do not call this bot. You have been blocked automatically.' });
+            } catch (err) {
+                console.error('Anticall error:', err);
+            }
         }
-
-        // Block the user
-        try {
-            await sock.updateBlockStatus(callerJid, 'block');
-            console.log(`🚷 Blocked ${callerJid}`);
-        } catch (err) {
-            console.error('Block error:', err.message);
-        }
-
-        // Optional warning message
-        try {
-            await sock.sendMessage(callerJid, { text: '🚫 Do not call this bot. You are now blocked.' });
-        } catch {}
     }
 }
 
-// ----- Export Handler -----
-module.exports = { readState, writeState, handleIncomingCall };
+module.exports = { handleCall };
