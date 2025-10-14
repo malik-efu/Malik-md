@@ -66,7 +66,7 @@ async function twitterScraperBackup(url) {
 
 // Twitter Download Command
 cmd({
-    pattern: "twitter",
+    pattern: "twitte",
     alias: ["x", "xdl"],
     react: "🐦",
     desc: "Download Twitter/X videos and images",
