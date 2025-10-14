@@ -1,77 +1,84 @@
-const axios = require('axios');
 const { cmd } = require('../command');
+const fs = require('fs');
+const path = require('path');
+
+const dataFile = path.join(__dirname, '../data/grpPrefix.json');
+
+// Helper functions to read/write prefix data
+function readPrefixes() {
+    try {
+        if (!fs.existsSync(dataFile)) return {};
+        const raw = fs.readFileSync(dataFile, 'utf8');
+        return JSON.parse(raw || '{}');
+    } catch {
+        return {};
+    }
+}
+
+function writePrefixes(prefixes) {
+    try {
+        const dir = path.dirname(dataFile);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(dataFile, JSON.stringify(prefixes, null, 2));
+        return true;
+    } catch {
+        return false;
+    }
+}
 
 cmd({
-    pattern: "gemini",
-    alias: ["gm", "google"],
-    react: "🤖",
-    desc: "Interact with Gemini AI",
-    category: "ai",
-    use: ".gemini <prompt>",
+    pattern: "prefix",
+    alias: ["currentprefix"],
+    react: "🔰",
+    desc: "Display or set bot prefix",
+    category: "utility",
+    use: ".prefix or .prefix set <symbol>",
     filename: __filename
-}, async (conn, mek, m, { from, q, quoted, reply }) => {
+}, async (conn, mek, m, { from, isGroup, isAdmins, q, reply, prefix }) => {
     try {
-        if (!q) {
-            return reply("Please provide a prompt to interact with Gemini AI.");
+        const prefixes = readPrefixes();
+        const args = q ? q.split(' ') : [];
+
+        // Show current prefix
+        if (!args[0]) {
+            const globalPrefix = prefix;
+            const groupPrefix = prefixes[from];
+
+            if (isGroup) {
+                return reply(
+                    `🔰 Prefix Information:\n\n` +
+                    `🌍 Global Prefix: \`${globalPrefix}\`\n` +
+                    `👥 Group Prefix: \`${groupPrefix || "Not set (using global)"}\``
+                );
+            } else {
+                return reply(`🌍 My current prefix is: \`${globalPrefix}\``);
+            }
         }
 
-        // Get Gemini API from external source
-        const apis = await axios.get('https://raw.githubusercontent.com/MOHAMMAD-NAYAN-07/Nayan/main/api.json');
-        const geminiApi = apis.data.gemini;
+        // Set prefix
+        if (args[0].toLowerCase() === "set") {
+            if (!isGroup) {
+                return reply("❌ This command can only be used in groups.");
+            }
+            if (!isAdmins) {
+                return reply("❌ Only group admins can set prefix.");
+            }
+            if (!args[1]) {
+                return reply("❌ Please provide a prefix to set.\nExample: .prefix set !");
+            }
 
-        let promptData = {
-            modelType: 'text_only',
-            prompt: q
-        };
+            const newPrefix = args[1];
+            prefixes[from] = newPrefix;
 
-        // Check if there's an image in quoted message
-        if (quoted && quoted.imageMessage) {
-            // Download image and convert to base64
-            const imageBuffer = await quoted.download();
-            const base64Image = imageBuffer.toString('base64');
-            
-            promptData = {
-                modelType: 'text_and_image',
-                prompt: q,
-                imageParts: [`data:image/jpeg;base64,${base64Image}`]
-            };
-        }
-
-        const { data } = await axios.post(geminiApi + '/gemini', promptData, {
-            timeout: 30000
-        });
-
-        const result = data?.result;
-
-        if (result) {
-            await conn.sendMessage(from, {
-                text: `🤖 *Gemini AI*\n\n${result}\n\n*DARKZONE-MD*`,
-                contextInfo: {
-                    mentionedJid: [m.sender],
-                    forwardingScore: 999,
-                    isForwarded: true,
-                    forwardedNewsletterMessageInfo: {
-                        newsletterJid: '120363416743041101@newsletter',
-                        newsletterName: "DARKZONE-MD",
-                        serverMessageId: 143,
-                    },
-                },
-            }, { quoted: m });
-        } else {
-            reply("❌ No response received from Gemini AI. Please try again.");
+            if (writePrefixes(prefixes)) {
+                return reply(`✅ Prefix updated for this group.\n👉 New Prefix: \`${newPrefix}\``);
+            } else {
+                return reply("❌ Failed to save prefix. Please try again.");
+            }
         }
 
     } catch (error) {
-        console.error('Gemini AI Error:', error);
-        
-        if (error.code === 'ECONNREFUSED') {
-            reply("❌ Gemini service is currently unavailable.");
-        } else if (error.code === 'TIMEOUT') {
-            reply("❌ Request timeout. Please try again.");
-        } else if (error.response?.status === 404) {
-            reply("❌ Gemini API endpoint not found.");
-        } else {
-            reply("❌ An error occurred while interacting with Gemini AI.");
-        }
+        console.error('Prefix Command Error:', error);
+        reply("❌ An error occurred while processing prefix command.");
     }
 });
