@@ -39,7 +39,7 @@ async function downloadMusicFromYoutube(link, filePath) {
 }
 
 cmd({
-    pattern: "video",
+    pattern: "vide",
     alias: ["v"],
     react: "🎬",
     desc: "Search and download videos from YouTube",
