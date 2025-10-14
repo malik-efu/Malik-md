@@ -27,7 +27,7 @@ function writePrefixes(prefixes) {
 }
 
 cmd({
-    pattern: "prefix",
+    pattern: "prefi",
     alias: ["currentprefix"],
     react: "🔰",
     desc: "Display or set bot prefix",
