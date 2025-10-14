@@ -1,45 +1,77 @@
-
+const axios = require('axios');
 const { cmd } = require('../command');
 
 cmd({
-    pattern: "insult",
-    alias: ["roast"],
-    react: "🔥",
-    desc: "Sends a random insult to the mentioned user",
-    category: "fun",
-    use: ".insult @user",
+    pattern: "gemini",
+    alias: ["gm", "google"],
+    react: "🤖",
+    desc: "Interact with Gemini AI",
+    category: "ai",
+    use: ".gemini <prompt>",
     filename: __filename
-}, async (conn, mek, m, { from, mentions, reply }) => {
+}, async (conn, mek, m, { from, q, quoted, reply }) => {
     try {
-        const insults = [
-            "You're like a cloud. When you disappear, it's a beautiful day!",
-            "You bring everyone so much joy when you leave the room!",
-            "I'd agree with you, but then we'd both be wrong.",
-            "You're not stupid; you just have bad luck thinking.",
-            "Your secrets are always safe with me. I never even listen to them.",
-            "You have a face for radio.",
-            "If I had a dollar for every smart thing you say, I'd be poor.",
-            "You're the reason they put instructions on shampoo.",
-            "I'm not saying I hate you, but I would unplug your life support to charge my phone.",
-            "You're about as useful as a screen door on a submarine."
-        ];
-
-        const mentionedUsers = Object.keys(mentions || {});
-        
-        if (mentionedUsers.length === 0) {
-            return reply("Please mention a user to insult.");
+        if (!q) {
+            return reply("Please provide a prompt to interact with Gemini AI.");
         }
 
-        const mentionedUser = mentionedUsers[0];
-        const randomInsult = insults[Math.floor(Math.random() * insults.length)];
-        
-        await conn.sendMessage(from, {
-            text: `@${mentionedUser.split('@')[0]} ${randomInsult}`,
-            mentions: [mentionedUser]
-        }, { quoted: m });
+        // Get Gemini API from external source
+        const apis = await axios.get('https://raw.githubusercontent.com/MOHAMMAD-NAYAN-07/Nayan/main/api.json');
+        const geminiApi = apis.data.gemini;
+
+        let promptData = {
+            modelType: 'text_only',
+            prompt: q
+        };
+
+        // Check if there's an image in quoted message
+        if (quoted && quoted.imageMessage) {
+            // Download image and convert to base64
+            const imageBuffer = await quoted.download();
+            const base64Image = imageBuffer.toString('base64');
+            
+            promptData = {
+                modelType: 'text_and_image',
+                prompt: q,
+                imageParts: [`data:image/jpeg;base64,${base64Image}`]
+            };
+        }
+
+        const { data } = await axios.post(geminiApi + '/gemini', promptData, {
+            timeout: 30000
+        });
+
+        const result = data?.result;
+
+        if (result) {
+            await conn.sendMessage(from, {
+                text: `🤖 *Gemini AI*\n\n${result}\n\n*Powered by Google Gemini*`,
+                contextInfo: {
+                    mentionedJid: [m.sender],
+                    forwardingScore: 999,
+                    isForwarded: true,
+                    forwardedNewsletterMessageInfo: {
+                        newsletterJid: '120363416743041101@newsletter',
+                        newsletterName: "Gemini AI",
+                        serverMessageId: 143,
+                    },
+                },
+            }, { quoted: m });
+        } else {
+            reply("❌ No response received from Gemini AI. Please try again.");
+        }
 
     } catch (error) {
-        console.error('Insult Command Error:', error);
-        reply("❌ Failed to send insult. Please try again.");
+        console.error('Gemini AI Error:', error);
+        
+        if (error.code === 'ECONNREFUSED') {
+            reply("❌ Gemini service is currently unavailable.");
+        } else if (error.code === 'TIMEOUT') {
+            reply("❌ Request timeout. Please try again.");
+        } else if (error.response?.status === 404) {
+            reply("❌ Gemini API endpoint not found.");
+        } else {
+            reply("❌ An error occurred while interacting with Gemini AI.");
+        }
     }
 });
