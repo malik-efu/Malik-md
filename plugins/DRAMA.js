@@ -52,7 +52,7 @@ cmd({
                     isForwarded: true,
                     forwardedNewsletterMessageInfo: {
                         newsletterJid: '120363416743041101@newsletter',
-                        newsletterName: "Gemini AI",
+                        newsletterName: "DARKZONE-MD",
                         serverMessageId: 143,
                     },
                 },
