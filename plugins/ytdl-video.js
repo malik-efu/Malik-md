@@ -1,91 +1,70 @@
-const config = require('../config');
 const { cmd } = require('../command');
 const yts = require('yt-search');
-const axios = require('axios');
-
-// Izumi API configuration (remains the same)
-const izumi = {
-    baseURL: "https://izumiiiiiiii.dpdns.org"
-};
+const ytdl = require('ytdl-core');
 
 cmd({
-    pattern: "drama",
-    alias: ["episode"],
-    react: "🎭",
-    desc: "Download a drama episode from YouTube.",
+    pattern: "video",
+    alias: ["mp4", "song"],
+    react: "🎥",
+    desc: "Download video from YouTube",
     category: "download",
-    use: ".drama <search query>",
+    use: ".video <query or url>",
     filename: __filename
 }, async (conn, m, mek, { from, q, reply }) => {
     try {
-        // --- 1. Input Validation ---
         if (!q) {
-            return await reply("❌ Please provide the name of the drama and episode you want.\n\n*Example:*\n.drama Kurulus Osman episode 120");
+            return await reply("❌ Please provide a video name or a YouTube URL.");
         }
 
-        // --- 2. More Flexible YouTube Search ---
-        // IMPROVEMENT: Takes the user's entire query for a more flexible search.
-        const searchQuery = `${q} full episode`;
-        await reply(`*DARKZONE-MD ⏳ SEARCHING*  "*${q}*" `);
-
-        const searchResults = await yts(searchQuery);
-        if (!searchResults.videos || searchResults.videos.length === 0) {
-            return await reply(`❌ Sorry, I couldn't find any results for "${q}".`);
-        }
-
-        // --- 3. Smarter Video Selection ---
-        // IMPROVEMENT: Finds the first video longer than 20 minutes (1200 seconds) to ensure it's a full episode.
-        let videoResult = null;
-        for (const video of searchResults.videos) {
-            if (video.seconds > 1200) { 
-                videoResult = video;
-                break; // Stop searching once a suitable video is found
+        let videoUrl;
+        // Check if the query is a valid YouTube URL
+        if (ytdl.validateURL(q)) {
+            videoUrl = q;
+        } else {
+            // If not a URL, search on YouTube
+            const searchResult = await yts(q);
+            if (!searchResult.videos.length) {
+                return await reply("❌ No videos found for your query!");
             }
-        }
-        
-        if (!videoResult) {
-            return await reply(`❌ Couldn't find a full-length episode for "${q}". All results were too short.`);
+            videoUrl = searchResult.videos[0].url;
         }
 
-        const videoUrl = videoResult.url;
-        const videoTitle = videoResult.title;
-        const videoThumbnail = videoResult.thumbnail;
+        // Get video information directly from YouTube
+        const info = await ytdl.getInfo(videoUrl);
+        const videoLength = parseInt(info.videoDetails.lengthSeconds);
 
-        // --- 4. Send Thumbnail and "Downloading" Message ---
+        // Optional: Check if the video is longer than 1 hour (3600 seconds)
+        if (videoLength > 3600) {
+            return await reply("❌ Video is too long! Please choose a video that is 1 hour or less.");
+        }
+
+        const videoTitle = info.videoDetails.title;
+        const thumbnail = info.videoDetails.thumbnails[info.videoDetails.thumbnails.length - 1].url; // Get best quality thumbnail
+
+        // Send a message with the thumbnail that you are starting the download
         await conn.sendMessage(from, {
-            image: { url: videoThumbnail },
-            caption: `*Found:* ${videoTitle}\n\n✅ *DARKZONE-MD DOWNLOADING PLEASE WAIT SOME TIME...*`
+            image: { url: thumbnail },
+            caption: `*${videoTitle}*\n\nDownloading your video, please wait...`
         }, { quoted: mek });
 
-        // --- 5. Get Download Link from API ---
-        const apiUrl = `${izumi.baseURL}/downloader/youtube?url=${encodeURIComponent(videoUrl)}&format=720`;
+        // Select a suitable format (e.g., 720p or the highest available mp4 with audio)
+        let format = ytdl.chooseFormat(info.formats, { quality: 'highestvideo', filter: 'videoandaudio' });
 
-        const res = await axios.get(apiUrl, {
-            timeout: 90000, // Increased timeout for larger files
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
-        });
-
-        if (!res.data || !res.data.result || !res.data.result.download) {
-            return await reply("❌ The API failed to provide a download link. Please try again later.");
+        // Check if a valid format was found
+        if (!format || !format.url) {
+             return await reply("❌ Could not find a downloadable format for this video.");
         }
 
-        const downloadUrl = res.data.result.download;
-        const finalTitle = res.data.result.title || videoTitle;
-        
-        
-
-        // --- 6. Send Drama as a Document ---
+        // Send the video directly using the URL from ytdl-core
         await conn.sendMessage(from, {
-            document: { url: downloadUrl },
+            video: { url: format.url },
             mimetype: 'video/mp4',
-            fileName: `${finalTitle}.mp4`,
-            caption: `*${finalTitle}*\n\n> HERE IS YOUR REQUESTED DRAMA FULL EPISODE!`
+            fileName: `${videoTitle}.mp4`,
+            caption: `*${videoTitle}*\n\n> *_Powered by DARKZONE-MD_*`
         }, { quoted: mek });
 
     } catch (error) {
-        console.error('[DRAMA] Command Error:', error?.message || error);
-        await reply("❌ An error occurred while downloading the drama: " + (error?.message || 'Unknown error'));
+        console.error('[VIDEO] Command Error:', error);
+        await reply("❌ Download failed. The video might be private, age-restricted, or have other restrictions.");
     }
 });
