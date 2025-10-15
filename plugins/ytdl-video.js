@@ -54,7 +54,7 @@ cmd({
         // --- 4. Send Thumbnail and "Downloading" Message ---
         await conn.sendMessage(from, {
             image: { url: videoThumbnail },
-            caption: `*Found:* ${videoTitle}\n\n✅ Now preparing your download. This may take a few minutes for a full episode...`
+            caption: `*Found:* ${videoTitle}\n\n✅ DARKZONE-MD DOWNLOADING PLEASE WAIT SOME TIME...`
         }, { quoted: mek });
 
         // --- 5. Get Download Link from API ---
@@ -74,7 +74,7 @@ cmd({
         const downloadUrl = res.data.result.download;
         const finalTitle = res.data.result.title || videoTitle;
         
-        await reply(`✅ Download link acquired. Now sending the file as a document...`);
+        await reply(``);
 
         // --- 6. Send Drama as a Document ---
         await conn.sendMessage(from, {
