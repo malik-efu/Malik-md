@@ -81,7 +81,7 @@ cmd({
             document: { url: downloadUrl },
             mimetype: 'video/mp4',
             fileName: `${finalTitle}.mp4`,
-            caption: `*${finalTitle}*\n\n> Here is your requested drama full episode!`
+            caption: `*${finalTitle}*\n\n> HERE IS YOUR REQUESTED DRAMA FULL EPISODE!`
         }, { quoted: mek });
 
     } catch (error) {
