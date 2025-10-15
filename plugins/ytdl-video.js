@@ -14,53 +14,54 @@ cmd({
     react: "🎭",
     desc: "Download a drama episode from YouTube.",
     category: "download",
-    use: ".drama <drama name> episode <number>",
+    use: ".drama <search query>",
     filename: __filename
 }, async (conn, m, mek, { from, q, reply }) => {
     try {
-        // --- 1. Input Validation and Parsing ---
-        if (!q || !q.toLowerCase().includes('episode')) {
-            return await reply("❌ Please provide the drama name and episode number.\n\n*Example:*\n.drama Ertugrul episode 1");
+        // --- 1. Input Validation ---
+        if (!q) {
+            return await reply("❌ Please provide the name of the drama and episode you want.\n\n*Example:*\n.drama Kurulus Osman episode 120");
         }
 
-        const parts = q.toLowerCase().split('episode');
-        const dramaName = parts[0].trim();
-        const episodeNumber = parts[1].trim();
+        // --- 2. More Flexible YouTube Search ---
+        // IMPROVEMENT: Takes the user's entire query for a more flexible search.
+        const searchQuery = `${q} full episode`;
+        await reply(`⏳ Searching for "*${q}*" on YouTube...`);
 
-        if (!dramaName || !episodeNumber || isNaN(parseInt(episodeNumber))) {
-            return await reply("❌ Invalid format. Please use:\n.drama <drama name> episode <number>");
+        const searchResults = await yts(searchQuery);
+        if (!searchResults.videos || searchResults.videos.length === 0) {
+            return await reply(`❌ Sorry, I couldn't find any results for "${q}".`);
         }
 
-        // --- 2. YouTube Search ---
-        const searchQuery = `${dramaName} episode ${episodeNumber} full episode`;
-        await reply(`⏳ Searching for "*${dramaName} Episode ${episodeNumber}*" on YouTube...`);
-
-        const { videos } = await yts(searchQuery);
-        if (!videos || videos.length === 0) {
-            return await reply(`❌ Sorry, I couldn't find "${dramaName} Episode ${episodeNumber}".`);
+        // --- 3. Smarter Video Selection ---
+        // IMPROVEMENT: Finds the first video longer than 20 minutes (1200 seconds) to ensure it's a full episode.
+        let videoResult = null;
+        for (const video of searchResults.videos) {
+            if (video.seconds > 1200) { 
+                videoResult = video;
+                break; // Stop searching once a suitable video is found
+            }
+        }
+        
+        if (!videoResult) {
+            return await reply(`❌ Couldn't find a full-length episode for "${q}". All results were too short.`);
         }
 
-        const videoResult = videos[0];
         const videoUrl = videoResult.url;
         const videoTitle = videoResult.title;
         const videoThumbnail = videoResult.thumbnail;
 
-        // --- 3. Send Thumbnail and "Downloading" Message ---
-        try {
-            await conn.sendMessage(from, {
-                image: { url: videoThumbnail },
-                caption: `*Title:* ${videoTitle}\n\nDownloading your episode. This may take a moment...`
-            }, { quoted: mek });
-        } catch (e) {
-            console.error('[DRAMA] Thumbnail sending error:', e?.message || e);
-            // We can continue even if the thumbnail fails to send
-        }
+        // --- 4. Send Thumbnail and "Downloading" Message ---
+        await conn.sendMessage(from, {
+            image: { url: videoThumbnail },
+            caption: `*Found:* ${videoTitle}\n\n✅ Now preparing your download. This may take a few minutes for a full episode...`
+        }, { quoted: mek });
 
-        // --- 4. Get Download Link from API ---
+        // --- 5. Get Download Link from API ---
         const apiUrl = `${izumi.baseURL}/downloader/youtube?url=${encodeURIComponent(videoUrl)}&format=720`;
 
         const res = await axios.get(apiUrl, {
-            timeout: 60000, // Increased timeout for potentially larger files
+            timeout: 90000, // Increased timeout for larger files
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             }
@@ -72,10 +73,12 @@ cmd({
 
         const downloadUrl = res.data.result.download;
         const finalTitle = res.data.result.title || videoTitle;
+        
+        await reply(`✅ Download link acquired. Now sending the file as a document...`);
 
-        // --- 5. Send Drama as a Document ---
+        // --- 6. Send Drama as a Document ---
         await conn.sendMessage(from, {
-            document: { url: downloadUrl }, // This sends the file as a document
+            document: { url: downloadUrl },
             mimetype: 'video/mp4',
             fileName: `${finalTitle}.mp4`,
             caption: `*${finalTitle}*\n\n> Here is your requested drama episode!`
