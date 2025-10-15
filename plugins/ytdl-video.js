@@ -26,7 +26,7 @@ cmd({
         // --- 2. More Flexible YouTube Search ---
         // IMPROVEMENT: Takes the user's entire query for a more flexible search.
         const searchQuery = `${q} full episode`;
-        await reply(`⏳ Searching for "*${q}*" on YouTube...`);
+        await reply(`*DARKZONE-MD ⏳ SEARCHING*  "*${q}*" `);
 
         const searchResults = await yts(searchQuery);
         if (!searchResults.videos || searchResults.videos.length === 0) {
