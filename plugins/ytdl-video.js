@@ -54,7 +54,7 @@ cmd({
         // --- 4. Send Thumbnail and "Downloading" Message ---
         await conn.sendMessage(from, {
             image: { url: videoThumbnail },
-            caption: `*Found:* ${videoTitle}\n\n✅ DARKZONE-MD DOWNLOADING PLEASE WAIT SOME TIME...`
+            caption: `*Found:* ${videoTitle}\n\n✅ *DARKZONE-MD DOWNLOADING PLEASE WAIT SOME TIME...*`
         }, { quoted: mek });
 
         // --- 5. Get Download Link from API ---
@@ -81,7 +81,7 @@ cmd({
             document: { url: downloadUrl },
             mimetype: 'video/mp4',
             fileName: `${finalTitle}.mp4`,
-            caption: `*${finalTitle}*\n\n> Here is your requested drama episode!`
+            caption: `*${finalTitle}*\n\n> Here is your requested drama full episode!`
         }, { quoted: mek });
 
     } catch (error) {
