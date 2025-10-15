@@ -9,7 +9,7 @@ const pinterestAPI = {
 };
 
 cmd({
-    pattern: "pins",
+    pattern: "pinss",
     alias: ["pinterest", "pint"],
     react: "📌",
     desc: "Download video from Pinterest as document",
