@@ -1,95 +1,114 @@
 
 const config = require('../config');
 const { cmd } = require('../command');
+const yts = require('yt-search');
 const axios = require('axios');
 
-// Pinterest API configuration
-const pinterestAPI = {
-    baseURL: "https://api.privatezia.biz.id/api/downloader/pinterestdl"
+// Izumi API configuration
+const izumi = {
+    baseURL: "https://izumiiiiiiii.dpdns.org"
 };
 
 cmd({
-    pattern: "pinss",
-    alias: ["pinterest", "pint"],
-    react: "📌",
-    desc: "Download video from Pinterest as document",
+    pattern: "video",
+    alias: ["vid"],
+    react: "🎥",
+    desc: "Download video from YouTube",
     category: "download",
-    use: ".pins <pinterest_url>",
+    use: ".video <query or url>",
     filename: __filename
 }, async (conn, m, mek, { from, q, reply }) => {
     try {
-        if (!q) return await reply("❌ Please provide a Pinterest URL!");
+        if (!q) return await reply("❌ What video do you want to download?");
+
+        let videoUrl = '';
+        let videoTitle = '';
+        let videoThumbnail = '';
         
-        // Validate Pinterest URL
-        if (!q.includes('pinterest.com') && !q.includes('pin.it')) {
-            return await reply("❌ Please provide a valid Pinterest URL!");
+        // Determine if input is a YouTube link
+        if (q.startsWith('http://') || q.startsWith('https://')) {
+            videoUrl = q;
+        } else {
+            // Search YouTube for the video
+            const { videos } = await yts(q);
+            if (!videos || videos.length === 0) {
+                return await reply("❌ No videos found!");
+            }
+            videoUrl = videos[0].url;
+            videoTitle = videos[0].title;
+            videoThumbnail = videos[0].thumbnail;
         }
 
-        // ⏳ React - processing
-        await conn.sendMessage(from, { react: { text: '⏳', key: m.key } });
+        // Send thumbnail immediately
+        try {
+            const ytId = (videoUrl.match(/(?:youtu\.be\/|v=)([a-zA-Z0-9_-]{11})/) || [])[1];
+            const thumb = videoThumbnail || (ytId ? `https://i.ytimg.com/vi/${ytId}/sddefault.jpg` : undefined);
+            const captionTitle = videoTitle || q;
+            if (thumb) {
+                await conn.sendMessage(from, {
+                    image: { url: thumb },
+                    caption: `*${captionTitle}*\nDownloading...`
+                }, { quoted: mek });
+            }
+        } catch (e) { 
+            console.error('[VIDEO] thumb error:', e?.message || e); 
+        }
 
-        // Get Pinterest download link from API
-        const apiUrl = `${pinterestAPI.baseURL}?url=${encodeURIComponent(q)}`;
+        // Validate YouTube URL
+        let urls = videoUrl.match(/(?:https?:\/\/)?(?:youtu\.be\/|(?:www\.|m\.)?youtube\.com\/(?:watch\?v=|v\/|embed\/|shorts\/|playlist\?list=)?)([a-zA-Z0-9_-]{11})/gi);
+        if (!urls) {
+            return await reply("❌ This is not a valid YouTube link!");
+        }
+
+        // Get Izumi API link for video
+        const apiUrl = `${izumi.baseURL}/downloader/youtube?url=${encodeURIComponent(videoUrl)}&format=720`;
         
         const res = await axios.get(apiUrl, {
             timeout: 30000,
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'accept': '*/*'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             }
         });
 
-        if (!res.data || !res.data.status || !res.data.data || !res.data.data.medias) {
-            await conn.sendMessage(from, { react: { text: '❌', key: m.key } });
-            return await reply("❌ Failed to download from Pinterest API.");
+        if (!res.data || !res.data.result || !res.data.result.download) {
+            return await reply("❌ Izumi API failed to return a valid video link.");
         }
 
-        const pinterestData = res.data.data;
-        const medias = pinterestData.medias;
+        const videoData = res.data.result;
 
-        // Find the best quality video (prefer mp4)
-        const videoMedia = medias.find(media => 
-            media.extension === 'mp4' && media.videoAvailable
-        );
-
-        // Find the best quality image
-        const imageMedia = medias.find(media => 
-            media.extension === 'jpg' && !media.videoAvailable
-        );
-
-        if (videoMedia) {
-            // Send video as document
-            await conn.sendMessage(from, {
-                document: { url: videoMedia.url },
-                mimetype: 'video/mp4',
-                fileName: `Pinterest Video.mp4`,
-                caption: `*Pinterest Video Downloaded*\n\n> ${config.DESCRIPTION}`
-            }, { quoted: mek });
-            
-            // ✅ React - success
-            await conn.sendMessage(from, { react: { text: '✅', key: m.key } });
-            
-        } else if (imageMedia) {
-            // Send image as document
-            await conn.sendMessage(from, {
-                document: { url: imageMedia.url },
-                mimetype: 'image/jpeg',
-                fileName: `Pinterest Pic.jpg`,
-                caption: `*Pinterest Image*\n\n> ${config.DESCRIPTION}`
-            }, { quoted: mek });
-            
-            // ✅ React - success
-            await conn.sendMessage(from, { react: { text: '✅', key: m.key } });
-            
-        } else {
-            await conn.sendMessage(from, { react: { text: '❌', key: m.key } });
-            await reply("❌ No downloadable media found. Please provide a video URL.");
-        }
+        // Send video directly using the download URL
+        await conn.sendMessage(from, {
+            video: { url: videoData.download },
+            mimetype: 'video/mp4',
+            fileName: `${videoData.title || videoTitle || 'video'}.mp4`,
+            caption: `*${videoData.title || videoTitle || 'Video'}*\n\n> *_POWERED BY KHAN-MD_*`
+        }, { quoted: mek });
 
     } catch (error) {
-        console.error('[PINTEREST] Command Error:', error?.message || error);
-        await conn.sendMessage(from, { react: { text: '❌', key: m.key } });
+        console.error('[VIDEO] Command Error:', error?.message || error);
         await reply("❌ Download failed: " + (error?.message || 'Unknown error'));
     }
 });
+
+
+cmd({
+    pattern: "ytmp4",
+    alias: ["video2", "ytv"],
+    desc: "Download YouTube videos",
+    category: "downloader",
+    react: "📹",
+    filename: __filename
+}, async (conn, mek, m, { from, q, reply }) => {
+    try {
+        if (!q) return await reply("📺 Please provide video name or URL!\n\nExample: .video funny cat");
+
+        // Search on YouTube if query is not a link
+        let url = q;
+        if (!q.includes("youtube.com") && !q.includes("youtu.be")) {
+            const { videos } = await yts(q);
+            if (!videos || videos.length === 0) return await reply("❌ No results found!");
+            url = videos[0].url;
+        }
+
+        const api = `ht
 
