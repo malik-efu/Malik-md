@@ -74,7 +74,7 @@ cmd({
         const downloadUrl = res.data.result.download;
         const finalTitle = res.data.result.title || videoTitle;
         
-        await reply(``);
+        
 
         // --- 6. Send Drama as a Document ---
         await conn.sendMessage(from, {
