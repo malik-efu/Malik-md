@@ -10,7 +10,7 @@ const izumi = {
 };
 
 cmd({
-    pattern: "video",
+    pattern: "vide",
     alias: ["vid"],
     react: "🎥",
     desc: "Download video from YouTube",
@@ -89,26 +89,4 @@ cmd({
         await reply("❌ Download failed: " + (error?.message || 'Unknown error'));
     }
 });
-
-
-cmd({
-    pattern: "ytmp4",
-    alias: ["video2", "ytv"],
-    desc: "Download YouTube videos",
-    category: "downloader",
-    react: "📹",
-    filename: __filename
-}, async (conn, mek, m, { from, q, reply }) => {
-    try {
-        if (!q) return await reply("📺 Please provide video name or URL!\n\nExample: .video funny cat");
-
-        // Search on YouTube if query is not a link
-        let url = q;
-        if (!q.includes("youtube.com") && !q.includes("youtu.be")) {
-            const { videos } = await yts(q);
-            if (!videos || videos.length === 0) return await reply("❌ No results found!");
-            url = videos[0].url;
-        }
-
-        const api = `ht
 
