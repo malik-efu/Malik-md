@@ -1,112 +1,95 @@
 const { cmd } = require('../command');
 
-// Store to track recent promotions to avoid loops
-let recentPromotions = new Map();
+// Store feature state and temporary tracking
+let antiPromoteEnabled = false;
+let recentPromotions = new Set();
 
 cmd({
     pattern: "antipromote",
     alias: ["antipromo", "nopromote"],
     react: "🚫",
-    desc: "Auto-revoke admin promotions in group",
+    desc: "Auto-demote anyone who promotes another user",
     category: "group",
     use: ".antipromote <on/off/status>",
     filename: __filename
-}, async (conn, mek, m, { from, q, reply, isOwner, isAdmins }) => {
+}, async (conn, mek, m, { from, q, reply, isOwner }) => {
     try {
-        if (!isOwner) {
-            return reply("❌ This command can only be used by the bot owner.");
-        }
+        if (!isOwner) return reply("❌ Only the *bot owner* can toggle Anti-Promote.");
 
         const sub = (q || '').trim().toLowerCase();
 
-        if (!sub || (sub !== 'on' && sub !== 'off' && sub !== 'status')) {
-            return reply(`*🚫 ANTIPROMOTE*\n\n.antipromote on - Enable auto-revoke on promotions\n.antipromote off - Disable antipromote\n.antipromote status - Show current status`);
+        if (!['on', 'off', 'status'].includes(sub)) {
+            return reply(`*🚫 ANTIPROMOTE*\n\n.antipromote on - Enable auto-demote when someone promotes\n.antipromote off - Disable it\n.antipromote status - Check current status`);
         }
 
         if (sub === 'status') {
-            const isEnabled = recentPromotions.get('enabled') || false;
-            return reply(`🚫 Antipromote is currently *${isEnabled ? 'ON' : 'OFF'}*.`);
+            return reply(`🚫 Anti-Promote is currently *${antiPromoteEnabled ? 'ON' : 'OFF'}*.`);
         }
 
-        const enable = sub === 'on';
-        recentPromotions.set('enabled', enable);
-        
-        await reply(`🚫 Antipromote is now *${enable ? 'ENABLED' : 'DISABLED'}*.`);
-
-    } catch (error) {
-        console.error('Antipromote Command Error:', error);
-        reply("❌ Failed to update antipromote settings.");
+        antiPromoteEnabled = sub === 'on';
+        return reply(`🚫 Anti-Promote has been *${antiPromoteEnabled ? 'ENABLED' : 'DISABLED'}*.`);
+    } catch (err) {
+        console.error("AntiPromote Error:", err);
+        reply("❌ Something went wrong while toggling AntiPromote.");
     }
 });
 
-// Function to handle group participants update
 async function handleGroupParticipantsUpdate(conn, update) {
     try {
-        // Check if antipromote is enabled
-        if (!recentPromotions.get('enabled')) return;
+        if (!antiPromoteEnabled) return;
 
         const { id, participants, action } = update;
-        
-        // Only handle promote actions
         if (action !== 'promote') return;
 
-        // Get group metadata
         const groupMetadata = await conn.groupMetadata(id);
         const botNumber = conn.user.id.split(':')[0] + '@s.whatsapp.net';
-
-        // Check if bot is admin
         const isBotAdmin = groupMetadata.participants.find(p => p.id === botNumber)?.admin;
-        if (!isBotAdmin) return;
 
-        for (const participant of participants) {
-            const participantId = participant.id;
-            
-            // Skip if this is a recent action we processed (avoid loops)
-            const recentKey = `${id}_${participantId}`;
-            if (recentPromotions.has(recentKey)) return;
-            
-            // Mark this as recent to avoid loops
-            recentPromotions.set(recentKey, true);
-            setTimeout(() => recentPromotions.delete(recentKey), 5000);
+        if (!isBotAdmin) return; // Bot must be admin
 
-            try {
-                // Demote the promoted user
-                await conn.groupParticipantsUpdate(id, [participantId], 'demote');
-                
-                // Find who promoted (this might need additional logic based on your WhatsApp library)
-                // For now, we'll demote all admins except bot
-                const admins = groupMetadata.participants.filter(p => p.admin && p.id !== botNumber);
-                
-                for (const admin of admins) {
-                    const adminKey = `${id}_${admin.id}`;
-                    if (!recentPromotions.has(adminKey)) {
-                        recentPromotions.set(adminKey, true);
-                        setTimeout(() => recentPromotions.delete(adminKey), 5000);
-                        
-                        await conn.groupParticipantsUpdate(id, [admin.id], 'demote');
-                    }
-                }
+        // The WhatsApp event doesn’t show who promoted, so we use last messages to detect it
+        const msgs = await conn.fetchMessages(id, { limit: 5 });
+        const promotionMsg = msgs.find(m => 
+            m.messageStubType === 29 && // Promotion stub type
+            participants.includes(m.messageStubParameters?.[0])
+        );
 
-                // Send message to group
-                await conn.sendMessage(id, {
-                    text: "🚫 *Dark Zone MD has to promote user*\n\nAdmin promotions are automatically revoked in this group."
-                });
-
-                break; // Process only one promotion at a time
-
-            } catch (error) {
-                console.error('Error in antipromote handler:', error);
-            }
+        let promoterId = null;
+        if (promotionMsg?.key?.participant) {
+            promoterId = promotionMsg.key.participant;
         }
 
-    } catch (error) {
-        console.error('Group Participants Update Error:', error);
+        for (const user of participants) {
+            const userId = user.id || user;
+
+            if (recentPromotions.has(`${id}_${userId}`)) return;
+            recentPromotions.add(`${id}_${userId}`);
+            setTimeout(() => recentPromotions.delete(`${id}_${userId}`), 5000);
+
+            // Undo promotion
+            await conn.groupParticipantsUpdate(id, [userId], 'demote');
+
+            if (promoterId && promoterId !== botNumber) {
+                // Demote the one who promoted
+                await conn.groupParticipantsUpdate(id, [promoterId], 'demote');
+
+                await conn.sendMessage(id, {
+                    text: `🚫 *Anti-Promote Activated!*\n\n@${promoterId.split('@')[0]} promoted someone, and has been *demoted* automatically.`,
+                    mentions: [promoterId]
+                });
+            } else {
+                // Fallback if promoter not detected
+                await conn.sendMessage(id, {
+                    text: `🚫 Promotion revoked! This group is protected by *Anti-Promote* mode.`,
+                });
+            }
+        }
+    } catch (err) {
+        console.error('Error in AntiPromote handler:', err);
     }
 }
 
-// Add this to your main bot file event handler
-// conn.ev.on('group-participants.update', async (update) => {
-//     await handleGroupParticipantsUpdate(conn, update);
-// });
+// Add this in your main event handler file:
+// conn.ev.on('group-participants.update', (update) => handleGroupParticipantsUpdate(conn, update));
 
 module.exports = { handleGroupParticipantsUpdate };
