@@ -8,7 +8,7 @@ const fs = require('fs-extra'); // Used for file system operations
 cmd(
     {
         pattern: 'sticker',
-        alias: ['s', 'stickergif', 'take', 'rename', 'stake'],
+        alias: ['sd', 'stickergif', 'take', 'rename', 'stake'],
         desc: 'Create a sticker from an image, video, or URL, or change the pack name of an existing sticker.',
         category: 'sticker',
         use: '<reply media or URL> [Optional: packname]',
