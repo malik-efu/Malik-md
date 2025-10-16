@@ -6,8 +6,8 @@ const Config = require('../config');
 
 cmd(
     {
-        pattern: 'sticker',
-        alias: ['s', 'stickergif', 'take', 'rename', 'stake'], // Added 'take' aliases here
+        pattern: 'stickera',
+        alias: ['sa', 'stickergif', 'take', 'rename', 'stake'], // Added 'take' aliases here
         desc: 'Create a sticker from an image, video, or URL, or change the pack name of an existing sticker.',
         category: 'sticker',
         use: '<reply media or URL> [Optional: packname]',
