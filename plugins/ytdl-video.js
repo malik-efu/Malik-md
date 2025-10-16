@@ -1,107 +1,120 @@
+const config = require('../config');
 const { cmd } = require('../command');
-const { Sticker, StickerTypes } = require("wa-sticker-formatter");
-const Config = require('../config');
-const fs = require('fs-extra'); // Used for file system operations
+const yts = require('yt-search');
+const axios = require('axios');
 
-// Universal Sticker Creator and Taker
+// Izumi API configuration (remains the same)
+const izumi = {
+    baseURL: "https://izumiiiiiiii.dpdns.org"
+};
 
-cmd(
-    {
-        pattern: 'sticker',
-        alias: ['sd', 'stickergif', 'take', 'rename', 'stake'],
-        desc: 'Create a sticker from an image, video, or URL, or change the pack name of an existing sticker.',
-        category: 'sticker',
-        use: '<reply media or URL> [Optional: packname]',
-        filename: __filename,
-    },
-    async (conn, mek, m, { quoted, args, q, reply, from }) => {
-        // 1. Check for Quoted Message
-        if (!mek.quoted) {
-            return reply(`*Reply to an Image, Video, or Sticker to convert it.*`);
+const SHORT_VIDEO_CATEGORIES = {
+    'sad_short': 'sad video song short whatsapp status',
+    'funny_short': 'funny comedy short clip whatsapp',
+    'islamic_short': 'islamic short video status reels',
+    'love_short': 'romantic love video short status',
+    'tech_short': 'technology facts short video reels',
+    'food_short': 'quick cooking recipe short video',
+    'dance_short': 'trending dance video short reels',
+    'news_short': 'latest world news short update'
+};
+
+cmd({
+    pattern: "yts_shorts",
+    alias: Object.keys(SHORT_VIDEO_CATEGORIES).concat(['shorts', 'shortvid', 'shortvideo']),
+    react: "🎬",
+    desc: "Download short videos/reels from YouTube based on a category.",
+    category: "download",
+    use: ".shorts <category> or use aliases like .funny_short",
+    filename: __filename
+}, async (conn, m, mek, { from, q, reply, prefix, command }) => {
+    try {
+        let baseQuery;
+        
+        // --- 1. Determine Search Query Based on Command or Input ---
+        if (command in SHORT_VIDEO_CATEGORIES) {
+            // If the user used an alias (e.g., .funny_short)
+            baseQuery = SHORT_VIDEO_CATEGORIES[command];
+        } else if (q && command === 'yts_shorts') {
+            // If the user used the main command with a specific query
+            baseQuery = `${q} short video reels status`;
+        } else {
+            // If no category/query is provided, show the menu
+            let menuText = "*🎬 YouTube Short Video Menu 🎬*\n\n" +
+                           "Please select a category to download a random short video:\n\n";
+            
+            for (const key in SHORT_VIDEO_CATEGORIES) {
+                // Formatting the command key for the user (e.g., sad_short -> .sad_short)
+                menuText += `*${prefix}${key}*\n`;
+            }
+            menuText += `\n*Example:* ${prefix}funny_short`;
+            
+            return await reply(menuText);
         }
 
-        let mime = mek.quoted.mtype;
-        let pack = Config.STICKER_NAME || "Your Sticker Pack"; // Default pack name
-        let author = Config.OWNER_NAME || 'Your Bot Name'; // Default author name
-        let media;
-        let stickerBuffer;
+        // --- 2. Send Searching Message ---
+        await reply(`*⏳ Searching for ${baseQuery}... Please wait.*`);
 
-        // 2. Determine the new Pack/Author Name (for 'take' functionality)
-        if (q) {
-            // If the user provides an argument (q), use it as the new pack name and author
-            pack = q.split('|')[0] || pack;
-            author = q.split('|')[1] || author;
+        // --- 3. Optimized YouTube Search for Shorts ---
+        // Shorter video duration filter (under 60 seconds) is crucial for shorts.
+        const searchResults = await yts({ query: baseQuery, maxResults: 15 });
+        
+        if (!searchResults.videos || searchResults.videos.length === 0) {
+            return await reply(`❌ Sorry, I couldn't find any short video results for that category.`);
+        }
+
+        // --- 4. Smarter Video Selection (Finds the first video under 60 seconds) ---
+        let videoResult = null;
+        for (const video of searchResults.videos) {
+            // YouTube Shorts are generally under 60 seconds (1 minute)
+            if (video.seconds > 5 && video.seconds <= 60) {
+                videoResult = video;
+                break; // Stop searching once a suitable short video is found
+            }
         }
         
-        // 3. Media Type Check and Sticker Creation
-        if (mime === "imageMessage" || mime === "stickerMessage") {
-            // Processing for Images and existing Stickers (Direct Buffer processing is fast and reliable)
-            await reply("*Processing Image/Sticker...*");
-            
-            try {
-                media = await mek.quoted.download();
-                
-                let sticker = new Sticker(media, {
-                    pack: pack,
-                    author: author, 
-                    type: StickerTypes.FULL,
-                    categories: ["🤩", "🎉"],
-                    quality: 75,
-                    background: 'transparent',
-                });
-                
-                stickerBuffer = await sticker.toBuffer();
-                
-            } catch (error) {
-                console.error("Image/Sticker creation error:", error);
-                return reply(`*An error occurred while processing the Image/Sticker:*\n${error.message}`);
-            }
-
-            // Send the resulting sticker
-            return conn.sendMessage(mek.chat, { sticker: stickerBuffer }, { quoted: mek });
-
-        } else if (mime === "videoMessage") {
-            // Processing for Videos (Requires temporary file for robust conversion)
-            await reply("*Processing Video... This may take up to 10 seconds.*");
-
-            // Generate a unique temporary path for the video
-            const tempFilePath = `./temp_vid_${Date.now()}.mp4`; 
-            
-            try {
-                // Download the video buffer
-                media = await mek.quoted.download();
-                
-                // 1. Save the video buffer to a temporary file
-                await fs.writeFileSync(tempFilePath, media);
-                
-                // 2. Create sticker using the file path (more reliable for FFmpeg/video conversion)
-                let sticker = new Sticker(tempFilePath, {
-                    pack: pack,
-                    author: author, 
-                    type: StickerTypes.FULL, // Full for animated sticker
-                    categories: ["🤩", "🎉"],
-                    quality: 75,
-                    // Note: Video duration must be under ~10 seconds for conversion to work.
-                    background: 'transparent',
-                });
-                
-                stickerBuffer = await sticker.toBuffer();
-                
-                // 3. Send the sticker
-                await conn.sendMessage(mek.chat, { sticker: stickerBuffer }, { quoted: mek });
-                
-            } catch (error) {
-                console.error("Video Sticker creation error:", error);
-                return reply(`*An error occurred while creating the video sticker. 😔*\n\n*Possible causes:*\n1. The video might be too long (must be under ~10 seconds).\n2. The video quality is too high, causing conversion failure.\n\n*Error details:*\n${error.message}`);
-            } finally {
-                // 4. GUARANTEED Cleanup of the temporary file
-                if (fs.existsSync(tempFilePath)) {
-                    await fs.remove(tempFilePath); // Use fs-extra's remove for better reliability
-                }
-            }
-        } else {
-            // If the replied message is an unsupported media type
-            return reply("*Uhh, Please reply to an Image, Video, or an existing Sticker.*");
+        if (!videoResult) {
+            return await reply(`❌ Couldn't find a video between 5 and 60 seconds long for that search term. Try a different category.`);
         }
+
+        const videoUrl = videoResult.url;
+        const videoTitle = videoResult.title;
+        const videoThumbnail = videoResult.thumbnail;
+
+        // --- 5. Send Thumbnail and "Downloading" Message ---
+        await conn.sendMessage(from, {
+            image: { url: videoThumbnail },
+            caption: `*Found Short Video:*\n${videoTitle}\n\n✅ *DOWNLOADING (Max 60s video)...*`
+        }, { quoted: mek });
+
+        // --- 6. Get Download Link from API ---
+        // Requesting 480p or 360p is usually enough for shorts and is faster.
+        const apiUrl = `${izumi.baseURL}/downloader/youtube?url=${encodeURIComponent(videoUrl)}&format=480`;
+
+        const res = await axios.get(apiUrl, {
+            timeout: 60000, // Reduced timeout since shorts are smaller files
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+        });
+
+        if (!res.data || !res.data.result || !res.data.result.download) {
+            return await reply("❌ The API failed to provide a download link. Please try again later.");
+        }
+
+        const downloadUrl = res.data.result.download;
+        const finalTitle = res.data.result.title || videoTitle;
+        
+        // --- 7. Send Short Video as a Video Message (not Document) ---
+        await conn.sendMessage(from, {
+            video: { url: downloadUrl },
+            mimetype: 'video/mp4',
+            caption: `*${finalTitle}*\n\n> Here is your requested short video!`,
+            fileName: `${finalTitle}.mp4`,
+        }, { quoted: mek });
+
+    } catch (error) {
+        console.error('[YTS_SHORTS] Command Error:', error?.message || error);
+        await reply("❌ An error occurred while downloading the short video: " + (error?.message || 'Unknown error'));
     }
-);
+});
