@@ -1,125 +1,182 @@
-const config = require('../config');
 const { cmd } = require('../command');
-const yts = require('yt-search');
-const axios = require('axios');
+const { Sticker, StickerTypes } = require("wa-sticker-formatter");
+const Config = require('../config');
+const fetch = require('node-fetch');
+const Crypto = require("crypto");
 
-// Izumi API configuration (remains the same)
-const izumi = {
-    baseURL: "https://izumiiiiiiii.dpdns.org"
-};
-
-const SHORT_VIDEO_CATEGORIES = {
-    'sad_short': 'sad video song short whatsapp status',
-    'funny_short': 'funny comedy short clip whatsapp',
-    'islamic_short': 'islamic short video status reels',
-    'love_short': 'romantic love video short status',
-    'tech_short': 'technology facts short video reels',
-    'food_short': 'quick cooking recipe short video',
-    'dance_short': 'trending dance video short reels',
-    'news_short': 'latest world news short update'
-};
-
-cmd({
-    pattern: "yts_shorts",
-    alias: Object.keys(SHORT_VIDEO_CATEGORIES).concat(['shorts', 'shortvid', 'shortvideo']),
-    react: "🎬",
-    desc: "Download short videos/reels from YouTube based on a category.",
-    category: "download",
-    use: ".shorts <category> or use aliases like .funny_short",
-    filename: __filename
-}, async (conn, m, mek, { from, q, reply, prefix, command }) => {
-    try {
-        let baseQuery;
-        
-        // --- 1. Determine Search Query Based on Command or Input ---
-        if (command in SHORT_VIDEO_CATEGORIES) {
-            // If the user used an alias (e.g., .funny_short)
-            baseQuery = SHORT_VIDEO_CATEGORIES[command];
-        } else if (q && command === 'yts_shorts') {
-            // If the user used the main command with a specific query
-            baseQuery = `${q} short video reels status`;
-        } else {
-            // If no category/query is provided, show the menu
-            let menuText = "*🎬 YouTube Short Video Menu 🎬*\n\n" +
-                           "Please select a category to download a random short video:\n\n";
-            
-            for (const key in SHORT_VIDEO_CATEGORIES) {
-                // Formatting the command key for the user (e.g., sad_short -> .sad_short)
-                menuText += `*${prefix}${key}*\n`;
+cmd(
+    {
+        pattern: 'tg',
+        alias: ['tpack', 'tgsticker', 'tgpack'],
+        desc: 'Download Telegram sticker pack',
+        category: 'sticker',
+        use: '<telegram_sticker_url>',
+        filename: __filename,
+    },
+    async (conn, mek, m, { quoted, args, q, reply, from }) => {
+        try {
+            if (!q) {
+                return reply(`📦 *Telegram Sticker Download*\n\nUsage: .tg <url>\nExample: .tg https://t.me/addstickers/blueemojii`);
             }
-            menuText += `\n*Example:* ${prefix}funny_short`;
-            
-            return await reply(menuText);
-        }
 
-        // --- 2. Send Searching Message ---
-        await reply(`*⏳ Searching for ${baseQuery}... Please wait.*`);
-
-        // --- 3. Optimized YouTube Search for Shorts ---
-        const searchResults = await yts({ query: baseQuery, maxResults: 15 });
-        
-        if (!searchResults.videos || searchResults.videos.length === 0) {
-            return await reply(`❌ Sorry, I couldn't find any short video results for that category.`);
-        }
-
-        // --- 4. Smarter Video Selection (Finds the first video under 60 seconds) ---
-        let videoResult = null;
-        for (const video of searchResults.videos) {
-            if (video.seconds > 5 && video.seconds <= 60) {
-                videoResult = video;
-                break; // Stop searching once a suitable short video is found
+            // Extract pack name from URL
+            let packName = q.replace("https://t.me/addstickers/", "").trim();
+            if (!packName) {
+                return reply('❌ *Invalid pack name!* Please check the URL.');
             }
-        }
-        
-        if (!videoResult) {
-            return await reply(`❌ Couldn't find a video between 5 and 60 seconds long for that search term. Try a different category.`);
-        }
 
-        const videoUrl = videoResult.url;
-        const videoTitle = videoResult.title;
-        const videoThumbnail = videoResult.thumbnail;
+            // Remove any extra parameters
+            packName = packName.split('?')[0];
 
-        // --- 5. Send Thumbnail and "Downloading" Message ---
-        await conn.sendMessage(from, {
-            image: { url: videoThumbnail },
-            caption: `*Found Short Video:*\n${videoTitle}\n\n✅ *DOWNLOADING (Max 60s video)...*`
-        }, { quoted: mek });
+            await reply(`🔍 *Searching for:* ${packName}\n⏳ *Please wait...*`);
 
-        // --- 6. Get Download Link from API ---
-        // Changed format to 360p as a test, as some APIs block higher resolutions.
-        const apiUrl = `${izumi.baseURL}/downloader/youtube?url=${encodeURIComponent(videoUrl)}&format=360`;
+            // Use your bot token
+            const botToken = '7801479976:AAGuPL0a7kXXBYz6XUSR_ll2SR5V_W6oHl4'; // Ensure this token is valid
 
-        const res = await axios.get(apiUrl, {
-            timeout: 60000, 
-            headers: {
-                // Keeping the robust User-Agent
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            try {
+                const response = await fetch(
+                    `https://api.telegram.org/bot${botToken}/getStickerSet?name=${encodeURIComponent(packName)}`,
+                    {
+                        method: 'GET',
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                        },
+                        timeout: 30000
+                    }
+                );
+
+                if (!response.ok) {
+                    return reply(`❌ *API Error!* HTTP ${response.status}\n\n💡 Check if:\n• Bot token is valid\n• Sticker pack exists\n• Pack is public`);
+                }
+
+                const data = await response.json();
+                
+                if (!data.ok || !data.result) {
+                    return reply(`❌ *Sticker pack not found!*\n\n📛 *Pack:* ${packName}\n🔍 *Error:* ${data.description || 'Unknown error'}\n\n💡 Make sure the sticker pack exists and is public.`);
+                }
+
+                const stickerSet = data.result;
+                const totalStickers = stickerSet.stickers.length;
+                
+                if (totalStickers === 0) {
+                    return reply('❌ *Empty sticker pack!* No stickers found.');
+                }
+
+                // Send pack info
+                await reply(`📦 *Sticker Pack Found!*\n\n✨ *Title:* ${stickerSet.title}\n📊 *Stickers:* ${totalStickers}\n🎨 *Type:* ${stickerSet.is_animated ? 'Animated (TGS)' : (stickerSet.is_video ? 'Video (WEBM)' : 'Static')}\n⏳ *Downloading...* Please wait!`);
+
+                let successCount = 0;
+
+                // Process each sticker
+                for (let i = 0; i < totalStickers; i++) {
+                    try {
+                        const sticker = stickerSet.stickers[i];
+                        
+                        // Get file path
+                        const fileResponse = await fetch(
+                            `https://api.telegram.org/bot${botToken}/getFile?file_id=${sticker.file_id}`,
+                            { timeout: 15000 }
+                        );
+                        
+                        if (!fileResponse.ok) {
+                            console.log(`Failed to get file path for sticker ${i + 1}`);
+                            continue;
+                        }
+                        
+                        const fileData = await fileResponse.json();
+                        if (!fileData.ok || !fileData.result.file_path) {
+                            console.log(`No file path for sticker ${i + 1}`);
+                            continue;
+                        }
+
+                        const filePath = fileData.result.file_path;
+
+                        // Download sticker
+                        const stickerResponse = await fetch(
+                            `https://api.telegram.org/file/bot${botToken}/${filePath}`,
+                            { timeout: 30000 } // Increased timeout for potentially larger video files
+                        );
+                        
+                        if (!stickerResponse.ok) {
+                            console.log(`Failed to download sticker ${i + 1}`);
+                            continue;
+                        }
+
+                        const stickerBuffer = await stickerResponse.buffer();
+
+                        // --- Core Fix: Determine Sticker Type and Conversion ---
+                        
+                        let stickerType = StickerTypes.FULL;
+                        let quality = 70;
+
+                        // Check for Animated (TGS) or Video (WEBM) stickers
+                        if (sticker.is_animated || sticker.is_video) {
+                            // Video/Animated stickers need to be converted to animated WEBP.
+                            // The wa-sticker-formatter handles this by using FFmpeg internally.
+                            // We set the type to full and decrease quality for smaller files.
+                            stickerType = StickerTypes.FULL; 
+                            quality = 50; // Use lower quality for animated stickers
+                        }
+                        // --- End Core Fix ---
+
+                        // Create WhatsApp sticker using your existing formatter
+                        const waSticker = new Sticker(stickerBuffer, {
+                            pack: stickerSet.title || Config.STICKER_NAME || "Telegram Pack",
+                            author: "via Telegram",
+                            type: stickerType,
+                            categories: sticker.emoji ? [sticker.emoji] : ["❤️"],
+                            id: Crypto.randomBytes(4).toString('hex'),
+                            quality: quality, // Quality based on sticker type
+                            background: 'transparent'
+                        });
+
+                        const finalBuffer = await waSticker.toBuffer();
+
+                        // Send sticker
+                        await conn.sendMessage(mek.chat, { 
+                            sticker: finalBuffer 
+                        }, { quoted: mek });
+
+                        successCount++;
+
+                        // Progress updates every 5 stickers
+                        if ((i + 1) % 5 === 0) {
+                            await reply(`📥 *Progress:* ${i + 1}/${totalStickers} stickers`);
+                        }
+
+                        // Delay to avoid rate limiting
+                        await new Promise(resolve => setTimeout(resolve, 1500));
+
+                    } catch (error) {
+                        console.error(`Error processing sticker ${i + 1}:`, error);
+                        // Send a specific error message for failed video/animated stickers
+                        if (error.message && error.message.includes('FFmpeg')) {
+                            await reply(`⚠️ *Sticker ${i + 1} Failed!* (Animated/Video)\nReason: **FFmpeg required.** Make sure it is installed and accessible in your environment.`);
+                        } else {
+                            await reply(`❌ *Sticker ${i + 1} Failed!* Error: ${error.message.substring(0, 50)}...`);
+                        }
+                        continue;
+                    }
+                }
+
+                // Final result
+                const resultMessage = `✅ *Download Complete!*\n\n📦 *Pack:* ${stickerSet.title}\n✅ *Success:* ${successCount}/${totalStickers} stickers\n✨ *Thank you for using!*`;
+
+                await reply(resultMessage);
+
+            } catch (error) {
+                console.error('Telegram API error:', error);
+                
+                if (error.name === 'TimeoutError' || error.type === 'request-timeout') {
+                    return reply('❌ *Request timeout!* Telegram API is slow. Try again later.');
+                }
+                
+                return reply(`❌ *API Connection Failed!*\n\nError: ${error.message.substring(0, 100)}...\n\n💡 Check your internet connection and bot token.`);
             }
-        });
 
-        if (!res.data || !res.data.result || !res.data.result.download) {
-            return await reply("❌ The API failed to provide a download link. Please try again later.");
-        }
-
-        const downloadUrl = res.data.result.download;
-        const finalTitle = res.data.result.title || videoTitle;
-        
-        // --- 7. Send Short Video as a Video Message ---
-        await conn.sendMessage(from, {
-            video: { url: downloadUrl },
-            mimetype: 'video/mp4',
-            caption: `*${finalTitle}*\n\n> Here is your requested short video!`,
-            fileName: `${finalTitle}.mp4`,
-        }, { quoted: mek });
-
-    } catch (error) {
-        // --- Enhanced Error Handling for 403 ---
-        if (axios.isAxiosError(error) && error.response && error.response.status === 403) {
-            console.error('[YTS_SHORTS] API Forbidden Error (403):', error.message);
-            await reply("❌ Download failed: The download service is currently blocking access (HTTP 403 Forbidden). This usually means the API is temporarily overloaded or restricting requests from the bot's server. Please try again in a few minutes.");
-        } else {
-            console.error('[YTS_SHORTS] Command Error:', error?.message || error);
-            await reply("❌ An error occurred while downloading the short video: " + (error?.message || 'Unknown error'));
+        } catch (error) {
+            console.error('Telegram command error:', error);
+            await reply('❌ *Unexpected error!* Please try again with a different sticker pack.');
         }
     }
-});
+);
