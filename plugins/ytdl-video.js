@@ -56,7 +56,6 @@ cmd({
         await reply(`*⏳ Searching for ${baseQuery}... Please wait.*`);
 
         // --- 3. Optimized YouTube Search for Shorts ---
-        // Shorter video duration filter (under 60 seconds) is crucial for shorts.
         const searchResults = await yts({ query: baseQuery, maxResults: 15 });
         
         if (!searchResults.videos || searchResults.videos.length === 0) {
@@ -66,7 +65,6 @@ cmd({
         // --- 4. Smarter Video Selection (Finds the first video under 60 seconds) ---
         let videoResult = null;
         for (const video of searchResults.videos) {
-            // YouTube Shorts are generally under 60 seconds (1 minute)
             if (video.seconds > 5 && video.seconds <= 60) {
                 videoResult = video;
                 break; // Stop searching once a suitable short video is found
@@ -88,12 +86,13 @@ cmd({
         }, { quoted: mek });
 
         // --- 6. Get Download Link from API ---
-        // Requesting 480p or 360p is usually enough for shorts and is faster.
-        const apiUrl = `${izumi.baseURL}/downloader/youtube?url=${encodeURIComponent(videoUrl)}&format=480`;
+        // Changed format to 360p as a test, as some APIs block higher resolutions.
+        const apiUrl = `${izumi.baseURL}/downloader/youtube?url=${encodeURIComponent(videoUrl)}&format=360`;
 
         const res = await axios.get(apiUrl, {
-            timeout: 60000, // Reduced timeout since shorts are smaller files
+            timeout: 60000, 
             headers: {
+                // Keeping the robust User-Agent
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             }
         });
@@ -105,7 +104,7 @@ cmd({
         const downloadUrl = res.data.result.download;
         const finalTitle = res.data.result.title || videoTitle;
         
-        // --- 7. Send Short Video as a Video Message (not Document) ---
+        // --- 7. Send Short Video as a Video Message ---
         await conn.sendMessage(from, {
             video: { url: downloadUrl },
             mimetype: 'video/mp4',
@@ -114,7 +113,13 @@ cmd({
         }, { quoted: mek });
 
     } catch (error) {
-        console.error('[YTS_SHORTS] Command Error:', error?.message || error);
-        await reply("❌ An error occurred while downloading the short video: " + (error?.message || 'Unknown error'));
+        // --- Enhanced Error Handling for 403 ---
+        if (axios.isAxiosError(error) && error.response && error.response.status === 403) {
+            console.error('[YTS_SHORTS] API Forbidden Error (403):', error.message);
+            await reply("❌ Download failed: The download service is currently blocking access (HTTP 403 Forbidden). This usually means the API is temporarily overloaded or restricting requests from the bot's server. Please try again in a few minutes.");
+        } else {
+            console.error('[YTS_SHORTS] Command Error:', error?.message || error);
+            await reply("❌ An error occurred while downloading the short video: " + (error?.message || 'Unknown error'));
+        }
     }
 });
