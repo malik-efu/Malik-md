@@ -1,91 +1,67 @@
-const config = require('../config');
 const { cmd } = require('../command');
-const yts = require('yt-search');
-const axios = require('axios');
+const { Sticker, StickerTypes } = require("wa-sticker-formatter");
+const Config = require('../config');
 
-// Izumi API configuration (remains the same)
-const izumi = {
-    baseURL: "https://izumiiiiiiii.dpdns.org"
-};
+// Universal Sticker Creator and Taker
 
-cmd({
-    pattern: "drama",
-    alias: ["episode"],
-    react: "🎭",
-    desc: "Download a drama episode from YouTube.",
-    category: "download",
-    use: ".drama <search query>",
-    filename: __filename
-}, async (conn, m, mek, { from, q, reply }) => {
-    try {
-        // --- 1. Input Validation ---
-        if (!q) {
-            return await reply("❌ Please provide the name of the drama and episode you want.\n\n*Example:*\n.drama Kurulus Osman episode 120");
+cmd(
+    {
+        pattern: 'sticker',
+        alias: ['s', 'stickergif', 'take', 'rename', 'stake'], // Added 'take' aliases here
+        desc: 'Create a sticker from an image, video, or URL, or change the pack name of an existing sticker.',
+        category: 'sticker',
+        use: '<reply media or URL> [Optional: packname]',
+        filename: __filename,
+    },
+    async (conn, mek, m, { quoted, args, q, reply, from }) => {
+        // 1. Check for Quoted Message
+        if (!mek.quoted) {
+            return reply(`*Reply to an Image, Video, or Sticker to convert it.*`);
         }
 
-        // --- 2. Send Searching Message IMMEDIATELY for faster perceived response ---
-        const searchQuery = `${q} full episode 720p`; // IMPROVEMENT: Added 'full episode 720p' to ensure finding full, high-quality episodes
-        await reply(`*DARKZONE-MD ⏳ SEARCHING* "*${q}*" `);
+        let mime = mek.quoted.mtype;
+        let pack = Config.STICKER_NAME || "Default Pack Name"; // Default pack name from config
 
-        // --- 3. More Flexible and Optimized YouTube Search ---
-        // IMPROVEMENT: Limit results for faster yts execution.
-        const searchResults = await yts({ query: searchQuery, maxResults: 10 });
-        
-        if (!searchResults.videos || searchResults.videos.length === 0) {
-            return await reply(`❌ Sorry, I couldn't find any results for "${q}".`);
+        // 2. Determine the new Pack Name (for 'take' functionality)
+        if (q) {
+            // If the user provides an argument (q), use it as the new pack name
+            pack = q;
         }
 
-        // --- 4. Smarter Video Selection (Finds the first long video) ---
-        // The time filter (1200 seconds = 20 minutes) helps ensure it's a full episode.
-        let videoResult = null;
-        for (const video of searchResults.videos) {
-            if (video.seconds > 1200) { 
-                videoResult = video;
-                break; // Stop searching once a suitable video is found
+        // 3. Media Type Check and Sticker Creation
+        if (mime === "imageMessage" || mime === "videoMessage" || mime === "stickerMessage") {
+            // Check if the file size is too large (e.g., for videos)
+            // Note: wa-sticker-formatter handles video conversion (max 10s)
+            
+            // Download the media
+            let media = await mek.quoted.download();
+            
+            // Set the sticker type based on media (video defaults to animated)
+            let stickerType = mime === "videoMessage" ? StickerTypes.FULL : StickerTypes.FULL; 
+            
+            // Create the Sticker
+            try {
+                let sticker = new Sticker(media, {
+                    pack: pack,
+                    author: Config.OWNER_NAME || 'Your Bot Name', // Optional: You can also change the author name
+                    type: stickerType,
+                    categories: ["🤩", "🎉"],
+                    id: "12345",
+                    quality: 75,
+                    background: 'transparent',
+                });
+                
+                const buffer = await sticker.toBuffer();
+                return conn.sendMessage(mek.chat, { sticker: buffer }, { quoted: mek });
+                
+            } catch (error) {
+                console.error("Sticker creation error:", error);
+                return reply(`*An error occurred while creating the sticker:*\n${error.message}`);
             }
+
+        } else {
+            // If the replied message is neither a photo, video, nor a sticker
+            return reply("*Uhh, Please reply to an Image, Video, or an existing Sticker.*");
         }
-        
-        if (!videoResult) {
-            return await reply(`❌ Couldn't find a full-length episode for "${q}". All results were too short or of poor quality.`);
-        }
-
-        const videoUrl = videoResult.url;
-        const videoTitle = videoResult.title;
-        const videoThumbnail = videoResult.thumbnail;
-
-        // --- 5. Send Thumbnail and "Downloading" Message ---
-        await conn.sendMessage(from, {
-            image: { url: videoThumbnail },
-            caption: `*Found:* ${videoTitle}\n\n✅ *DARKZONE-MD DOWNLOADING PLEASE WAIT SOME TIME...*`
-        }, { quoted: mek });
-
-        // --- 6. Get Download Link from API ---
-        const apiUrl = `${izumi.baseURL}/downloader/youtube?url=${encodeURIComponent(videoUrl)}&format=720`;
-
-        const res = await axios.get(apiUrl, {
-            timeout: 90000, // Kept the increased timeout for larger files
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
-        });
-
-        if (!res.data || !res.data.result || !res.data.result.download) {
-            return await reply("❌ The API failed to provide a download link. Please try again later.");
-        }
-
-        const downloadUrl = res.data.result.download;
-        const finalTitle = res.data.result.title || videoTitle;
-        
-        // --- 7. Send Drama as a Document ---
-        await conn.sendMessage(from, {
-            document: { url: downloadUrl },
-            mimetype: 'video/mp4',
-            fileName: `${finalTitle}.mp4`,
-            caption: `*${finalTitle}*\n\n> HERE IS YOUR REQUESTED DRAMA FULL EPISODE!`
-        }, { quoted: mek });
-
-    } catch (error) {
-        console.error('[DRAMA] Command Error:', error?.message || error);
-        await reply("❌ An error occurred while downloading the drama: " + (error?.message || 'Unknown error'));
     }
-});
+);
