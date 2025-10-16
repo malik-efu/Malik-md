@@ -1,13 +1,14 @@
 const { cmd } = require('../command');
 const { Sticker, StickerTypes } = require("wa-sticker-formatter");
 const Config = require('../config');
+const fs = require('fs-extra'); // Make sure fs-extra is required if you use it for temp files
 
 // Universal Sticker Creator and Taker
 
 cmd(
     {
-        pattern: 'stickera',
-        alias: ['sa', 'stickergif', 'take', 'rename', 'stake'], // Added 'take' aliases here
+        pattern: 'sticker',
+        alias: ['ssa', 'stickergif', 'take', 'rename', 'stake'],
         desc: 'Create a sticker from an image, video, or URL, or change the pack name of an existing sticker.',
         category: 'sticker',
         use: '<reply media or URL> [Optional: packname]',
@@ -20,34 +21,36 @@ cmd(
         }
 
         let mime = mek.quoted.mtype;
-        let pack = Config.STICKER_NAME || "Default Pack Name"; // Default pack name from config
+        let pack = Config.STICKER_NAME || "Your Sticker Pack"; // Default pack name
+        let author = Config.OWNER_NAME || 'Your Bot Name'; // Default author name
 
-        // 2. Determine the new Pack Name (for 'take' functionality)
+        // 2. Determine the new Pack/Author Name (for 'take' functionality)
         if (q) {
             // If the user provides an argument (q), use it as the new pack name
-            pack = q;
+            pack = q.split('|')[0] || pack;
+            author = q.split('|')[1] || author;
         }
 
         // 3. Media Type Check and Sticker Creation
-        if (mime === "imageMessage" || mime === "videoMessage" || mime === "stickerMessage") {
-            // Check if the file size is too large (e.g., for videos)
-            // Note: wa-sticker-formatter handles video conversion (max 10s)
+        if (mime === "imageMessage" || mime === "stickerMessage" || mime === "videoMessage") {
+            
+            await reply("*Processing... Please wait while I create your sticker.*");
             
             // Download the media
             let media = await mek.quoted.download();
             
-            // Set the sticker type based on media (video defaults to animated)
-            let stickerType = mime === "videoMessage" ? StickerTypes.FULL : StickerTypes.FULL; 
+            // Determine sticker type
+            let stickerType = (mime === "videoMessage") ? StickerTypes.FULL : StickerTypes.FULL; 
             
-            // Create the Sticker
             try {
                 let sticker = new Sticker(media, {
                     pack: pack,
-                    author: Config.OWNER_NAME || 'Your Bot Name', // Optional: You can also change the author name
+                    author: author, 
                     type: stickerType,
                     categories: ["🤩", "🎉"],
                     id: "12345",
                     quality: 75,
+                    // Video conversion quality can be adjusted here if needed (e.g., fps, size)
                     background: 'transparent',
                 });
                 
@@ -56,7 +59,13 @@ cmd(
                 
             } catch (error) {
                 console.error("Sticker creation error:", error);
-                return reply(`*An error occurred while creating the sticker:*\n${error.message}`);
+                
+                // Provide a specific message for video-related issues
+                if (mime === "videoMessage") {
+                    return reply(`*An error occurred while creating the video sticker. 😔*\n\n*Possible causes:*\n1. The video might be too long (must be under ~10 seconds).\n2. The video quality is too high.\n3. Server error during conversion.`);
+                } else {
+                     return reply(`*An error occurred while creating the sticker:*\n${error.message}`);
+                }
             }
 
         } else {
