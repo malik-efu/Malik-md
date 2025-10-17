@@ -1,42 +1,3 @@
-
-const { cmd } = require('../command');
-const config = require("../config");
-
-// --- Command to Toggle Anti-Mute Feature ---
-cmd({
-    'pattern': 'antimute ?(.*)',
-    'desc': 'Toggles the Anti-Mute feature which deletes links and mutes the group.',
-    'category': 'admin',
-    'fromMe': true // Only you (the bot owner) can use this command
-}, async (conn, m, store, {
-    from,
-    args,
-    isAdmins,
-    reply
-}) => {
-    // Check if the user is an admin of the group (or only allow bot owner)
-    // For simplicity, let's assume the 'fromMe: true' handles the restriction.
-    
-    if (!m.isGroup) {
-        return reply("This command can only be used in a group.");
-    }
-    
-    const action = args[0] ? args[0].toLowerCase() : '';
-
-    if (action === 'on') {
-        // You would typically save this setting to a database or config file.
-        // For this example, we'll just acknowledge the request.
-        // **Note:** The detection logic relies on a proper configuration setup (e.g., in config.js).
-        return reply("✅ *Anti-Mute feature is now ON!* Links will be deleted and the group will be set to 'Admin Only'.");
-    } else if (action === 'off') {
-        // You would typically save this setting to a database or config file.
-        return reply("❌ *Anti-Mute feature is now OFF!*");
-    } else {
-        return reply("Please use the command as follows:\n\n*antimute on* - To enable\n*antimute off* - To disable");
-    }
-});
-
-
 // --- Link Detection and Group Mute Logic ---
 cmd({
     'on': "body"
@@ -50,42 +11,43 @@ cmd({
     reply
 }) => {
     try {
-        // Ensure the bot is an admin and the sender is not an admin
+        // Only act in groups where bot is admin and sender isn't admin
         if (!isGroup || isAdmins || !isBotAdmins) {
             return;
         }
 
-        // Check if the feature is enabled (Assuming a config variable named ANTI_MUTE_ENABLED)
-        // **IMPORTANT:** You must set and manage this variable based on the 'antimute on/off' command.
+        // Check if the feature is enabled (You must set this config variable based on the 'antimute on/off' command)
+        // **I'm using ANTI_MUTE_ENABLED here instead of ANTI_LINK to match the new feature name.**
         if (config.ANTI_MUTE_ENABLED !== 'true') {
              return;
         }
 
-        // List of link patterns to detect (using the same list you provided)
+        // List of link patterns to detect (Exactly as you provided)
         const linkPatterns = [
-            /https?:\/\/(?:chat\.whatsapp\.com|wa\.me)\/\S+/gi,
-            /https?:\/\/(?:api\.whatsapp\.com|wa\.me)\/\S+/gi,
-            /wa\.me\/\S+/gi,
-            /https?:\/\/(?:t\.me|telegram\.me)\/\S+/gi,
-            /https?:\/\/(?:www\.)?\.com\/\S+/gi,
-            /https?:\/\/(?:www\.)?twitter\.com\/\S+/gi,
-            /https?:\/\/(?:www\.)?linkedin\.com\/\S+/gi,
-            /https?:\/\/(?:whatsapp\.com|channel\.me)\/\S+/gi,
-            /https?:\/\/(?:www\.)?reddit\.com\/\S+/gi,
-            /https?:\/\/(?:www\.)?discord\.com\/\S+/gi,
-            /https?:\/\/(?:www\.)?twitch\.tv\/\S+/gi,
-            /https?:\/\/(?:www\.)?vimeo\.com\/\S+/gi,
-            /https?:\/\/(?:www\.)?dailymotion\.com\/\S+/gi,
-            /https?:\/\/(?:www\.)?medium\.com\/\S+/gi
+            /https?:\/\/(?:chat\.whatsapp\.com|wa\.me)\/\S+/gi, // WhatsApp links
+            /https?:\/\/(?:api\.whatsapp\.com|wa\.me)\/\S+/gi,  // WhatsApp API links
+            /wa\.me\/\S+/gi,                                     // WhatsApp.me links
+            /https?:\/\/(?:t\.me|telegram\.me)\/\S+/gi,        // Telegram links
+            /https?:\/\/(?:www\.)?\.com\/\S+/gi,                 // Generic .com links
+            /https?:\/\/(?:www\.)?twitter\.com\/\S+/gi,          // Twitter links
+            /https?:\/\/(?:www\.)?linkedin\.com\/\S+/gi,         // LinkedIn links
+            /https?:\/\/(?:whatsapp\.com|channel\.me)\/\S+/gi,  // Other WhatsApp/channel links
+            /https?:\/\/(?:www\.)?reddit\.com\/\S+/gi,          // Reddit links
+            /https?:\/\/(?:www\.)?discord\.com\/\S+/gi,          // Discord links
+            /https?:\/\/(?:www\.)?twitch\.tv\/\S+/gi,            // Twitch links
+            /https?:\/\/(?:www\.)?vimeo\.com\/\S+/gi,            // Vimeo links
+            /https?:\/\/(?:www\.)?dailymotion\.com\/\S+/gi,      // Dailymotion links
+            /https?:\/\/(?:www\.)?medium\.com\/\S+/gi            // Medium links
         ];
 
         // Check if message contains any forbidden links
         const containsLink = linkPatterns.some(pattern => pattern.test(body));
 
+        // Only proceed if a link is detected
         if (containsLink) {
             console.log(`Link detected from ${sender}: ${body}`);
 
-            // 1. Delete the message (as requested)
+            // 1. Delete the message
             try {
                 await conn.sendMessage(from, {
                     delete: m.key
@@ -95,17 +57,20 @@ cmd({
                 console.error("Failed to delete message:", error);
             }
 
-            // 2. Mute the group (Group only allows admins to send messages)
-            const response = await conn.groupSettingUpdate(from, 'announcement'); // 'announcement' setting means admin-only
-
-            if (response && response.status === 200) {
+            // 2. Mute the group (Set to Admin Only/Announcement)
+            const response = await conn.groupSettingUpdate(from, 'announcement'); 
+            
+            // Send alert message
+            if (response) {
                 await conn.sendMessage(from, {
-                    text: `*🚨 GROUP MUTE ALERT! 🚨*\n\n**Link detected** from @${sender.split('@')[0]}! \n\n*The group has been set to 'Admin Only' mode to prevent further link sharing.*`,
+                    text: `*🚨 GROUP MUTED! 🚨*\n\n**Link detected** from @${sender.split('@')[0]}! \n\n*Group is now set to 'Admin Only' mode to secure the chat.*`,
                     mentions: [sender]
                 });
             } else {
-                 await reply("⚠️ Detected link, but failed to set group to 'Admin Only' mode. Check bot admin status.");
+                 await reply("⚠️ Detected link, but failed to set group to 'Admin Only' mode. Ensure the bot has administrative privileges.");
             }
+
+            // **KICK/REMOVE CODE IS DELETED AS REQUESTED**
         }
     } catch (error) {
         console.error("Anti-Mute error:", error);
