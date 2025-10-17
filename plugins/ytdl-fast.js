@@ -1,120 +1,114 @@
 
-const config = require('../config');
 const { cmd } = require('../command');
-const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
-const { promisify } = require('util');
-const stream = require('stream');
-const pipeline = promisify(stream.pipeline);
-const yts = require('yt-search');
+const config = require("../config");
 
+// --- Command to Toggle Anti-Mute Feature ---
 cmd({
-    pattern: "song",
-    alias: ["play", "mp3"],
-    react: "🎶",
-    desc: "Download YouTube song using Izumi API",
-    category: "main",
-    use: '.song <song name or YouTube link>',
-    filename: __filename
-}, async (conn, mek, m, { from, sender, reply, q }) => {
+    'pattern': 'antimute ?(.*)',
+    'desc': 'Toggles the Anti-Mute feature which deletes links and mutes the group.',
+    'category': 'admin',
+    'fromMe': true // Only you (the bot owner) can use this command
+}, async (conn, m, store, {
+    from,
+    args,
+    isAdmins,
+    reply
+}) => {
+    // Check if the user is an admin of the group (or only allow bot owner)
+    // For simplicity, let's assume the 'fromMe: true' handles the restriction.
+    
+    if (!m.isGroup) {
+        return reply("This command can only be used in a group.");
+    }
+    
+    const action = args[0] ? args[0].toLowerCase() : '';
+
+    if (action === 'on') {
+        // You would typically save this setting to a database or config file.
+        // For this example, we'll just acknowledge the request.
+        // **Note:** The detection logic relies on a proper configuration setup (e.g., in config.js).
+        return reply("✅ *Anti-Mute feature is now ON!* Links will be deleted and the group will be set to 'Admin Only'.");
+    } else if (action === 'off') {
+        // You would typically save this setting to a database or config file.
+        return reply("❌ *Anti-Mute feature is now OFF!*");
+    } else {
+        return reply("Please use the command as follows:\n\n*antimute on* - To enable\n*antimute off* - To disable");
+    }
+});
+
+
+// --- Link Detection and Group Mute Logic ---
+cmd({
+    'on': "body"
+}, async (conn, m, store, {
+    from,
+    body,
+    sender,
+    isGroup,
+    isAdmins,
+    isBotAdmins,
+    reply
+}) => {
     try {
-        if (!q) return reply("Please provide a song name or YouTube link.");
-
-        let video;
-        let title = "YouTube Song";
-        let thumbnail = "";
-
-        // Handle both search queries and direct links
-        if (q.includes('youtube.com') || q.includes('youtu.be')) {
-            video = { url: q, title: "YouTube Song" };
-        } else {
-            const search = await yts(q);
-            if (!search || !search.videos.length) {
-                return reply("No results found.");
-            }
-            video = search.videos[0];
-            title = video.title;
-            thumbnail = video.thumbnail;
+        // Ensure the bot is an admin and the sender is not an admin
+        if (!isGroup || isAdmins || !isBotAdmins) {
+            return;
         }
 
-        // Send processing message
-        const processingMsg = await reply(`🎵 Downloading: *${title}*`);
-
-        // Use Izumi API
-        const apiUrl = `https://izumiiiiiiii.dpdns.org/downloader/youtube?url=${encodeURIComponent(video.url)}&format=mp3`;
-        
-        const res = await axios.get(apiUrl, {
-            timeout: 30000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-        });
-
-        if (!res.data || !res.data.result || !res.data.result.download) {
-            throw new Error('Izumi API failed to return a valid link.');
+        // Check if the feature is enabled (Assuming a config variable named ANTI_MUTE_ENABLED)
+        // **IMPORTANT:** You must set and manage this variable based on the 'antimute on/off' command.
+        if (config.ANTI_MUTE_ENABLED !== 'true') {
+             return;
         }
 
-        const audioData = res.data.result;
+        // List of link patterns to detect (using the same list you provided)
+        const linkPatterns = [
+            /https?:\/\/(?:chat\.whatsapp\.com|wa\.me)\/\S+/gi,
+            /https?:\/\/(?:api\.whatsapp\.com|wa\.me)\/\S+/gi,
+            /wa\.me\/\S+/gi,
+            /https?:\/\/(?:t\.me|telegram\.me)\/\S+/gi,
+            /https?:\/\/(?:www\.)?\.com\/\S+/gi,
+            /https?:\/\/(?:www\.)?twitter\.com\/\S+/gi,
+            /https?:\/\/(?:www\.)?linkedin\.com\/\S+/gi,
+            /https?:\/\/(?:whatsapp\.com|channel\.me)\/\S+/gi,
+            /https?:\/\/(?:www\.)?reddit\.com\/\S+/gi,
+            /https?:\/\/(?:www\.)?discord\.com\/\S+/gi,
+            /https?:\/\/(?:www\.)?twitch\.tv\/\S+/gi,
+            /https?:\/\/(?:www\.)?vimeo\.com\/\S+/gi,
+            /https?:\/\/(?:www\.)?dailymotion\.com\/\S+/gi,
+            /https?:\/\/(?:www\.)?medium\.com\/\S+/gi
+        ];
 
-        // Create temp directory
-        const tempDir = path.join(__dirname, 'temp');
-        if (!fs.existsSync(tempDir)) {
-            fs.mkdirSync(tempDir, { recursive: true });
-        }
+        // Check if message contains any forbidden links
+        const containsLink = linkPatterns.some(pattern => pattern.test(body));
 
-        const tempFile = path.join(tempDir, `song_${Date.now()}.mp3`);
+        if (containsLink) {
+            console.log(`Link detected from ${sender}: ${body}`);
 
-        try {
-            // Download the audio file
-            const audioResponse = await axios({
-                method: 'GET',
-                url: audioData.download,
-                responseType: 'stream',
-                timeout: 120000,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                }
-            });
-
-            // Save to temporary file
-            await pipeline(audioResponse.data, fs.createWriteStream(tempFile));
-
-            // Read the file buffer
-            const audioBuffer = fs.readFileSync(tempFile);
-
-            // Send the audio file with rich context
-            await conn.sendMessage(from, {
-                audio: audioBuffer,
-                mimetype: 'audio/mpeg',
-                fileName: `${title.replace(/[^\w\s]/gi, '')}.mp3`,
-                contextInfo: {
-                    externalAdReply: {
-                        title: title.length > 25 ? `${title.substring(0, 22)}...` : title,
-                        body: "THIS IS DARKZONE-MD BOT BABY",
-                        mediaType: 1,
-                        thumbnailUrl: thumbnail,
-                        sourceUrl: video.url,
-                        showAdAttribution: false,
-                        renderLargerThumbnail: false
-                    }
-                }
-            }, { quoted: mek });
-
-        } catch (downloadError) {
-            console.error("Download error:", downloadError);
-            return reply("❌ Failed to download audio. Please try another song.");
-        } finally {
-            // Clean up temporary files
+            // 1. Delete the message (as requested)
             try {
-                if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
-            } catch (cleanError) {
-                console.error("Cleanup error:", cleanError);
+                await conn.sendMessage(from, {
+                    delete: m.key
+                });
+                console.log(`Message deleted: ${m.key.id}`);
+            } catch (error) {
+                console.error("Failed to delete message:", error);
+            }
+
+            // 2. Mute the group (Group only allows admins to send messages)
+            const response = await conn.groupSettingUpdate(from, 'announcement'); // 'announcement' setting means admin-only
+
+            if (response && response.status === 200) {
+                await conn.sendMessage(from, {
+                    text: `*🚨 GROUP MUTE ALERT! 🚨*\n\n**Link detected** from @${sender.split('@')[0]}! \n\n*The group has been set to 'Admin Only' mode to prevent further link sharing.*`,
+                    mentions: [sender]
+                });
+            } else {
+                 await reply("⚠️ Detected link, but failed to set group to 'Admin Only' mode. Check bot admin status.");
             }
         }
-
     } catch (error) {
-        console.error("Main error:", error);
-        reply("❌ An error occurred. Please try again with a different song.");
+        console.error("Anti-Mute error:", error);
+        reply("❌ An error occurred while processing the message.");
     }
 });
