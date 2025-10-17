@@ -1,104 +1,92 @@
 const config = require('../config');
 const { cmd } = require('../command');
-const { ytsearch } = require('@dark-yasiya/yt-dl.js');
+const yts = require('yt-search');
+const axios = require('axios');
 
-// MP4 video download
+// Izumi API configuration
+const izumi = {
+    baseURL: "https://izumiiiiiiii.dpdns.org"
+};
 
-cmd({ 
-    pattern: "mp4", 
-    alias: ["video"], 
-    react: "🎥", 
-    desc: "Download YouTube video", 
-    category: "main", 
-    use: '.mp4 < Yt url or Name >', 
-    filename: __filename 
-}, async (conn, mek, m, { from, prefix, quoted, q, reply }) => { 
-    try { 
-        if (!q) return await reply("Please provide a YouTube URL or video name.");
-        
-        const yt = await ytsearch(q);
-        if (yt.results.length < 1) return reply("No results found!");
-        
-        let yts = yt.results[0];  
-        let apiUrl = `https://apis.davidcyriltech.my.id/download/ytmp4?url=${encodeURIComponent(yts.url)}`;
-        
-        let response = await fetch(apiUrl);
-        let data = await response.json();
-        
-        if (data.status !== 200 || !data.success || !data.result.download_url) {
-            return reply("Failed to fetch the video. Please try again later.");
-        }
-
-        let ytmsg = `📹 *Video Downloader*
-🎬 *Title:* ${yts.title}
-⏳ *Duration:* ${yts.timestamp}
-👀 *Views:* ${yts.views}
-👤 *Author:* ${yts.author.name}
-🔗 *Link:* ${yts.url}
-> 𝐸𝑅𝐹𝒜𝒩 𝒜𝐻𝑀𝒜𝒟 ❤️`;
-
-        // Send video directly with caption
-        await conn.sendMessage(
-            from, 
-            { 
-                video: { url: data.result.download_url }, 
-                caption: ytmsg,
-                mimetype: "video/mp4"
-            }, 
-            { quoted: mek }
-        );
-
-    } catch (e) {
-        console.log(e);
-        reply("An error occurred. Please try again later.");
-    }
-});
-
-// MP3 song download 
-
-cmd({ 
-    pattern: "song", 
-    alias: ["play", "mp3"], 
-    react: "🎶", 
-    desc: "Download YouTube song", 
-    category: "main", 
-    use: '.song <query>', 
-    filename: __filename 
-}, async (conn, mek, m, { from, sender, reply, q }) => { 
+cmd({
+    pattern: "audio", // Changed pattern to 'audio'
+    alias: ["mp3", "yta"], // Changed aliases
+    react: "🎵", // Changed reaction to a music note
+    desc: "Download audio (MP3) from YouTube", // Updated description
+    category: "download",
+    use: ".audio <query or url>", // Updated usage
+    filename: __filename
+}, async (conn, m, mek, { from, q, reply }) => {
     try {
-        if (!q) return reply("Please provide a song name or YouTube link.");
+        if (!q) return await reply("❌ What audio do you want to download?"); // Updated message
 
-        const yt = await ytsearch(q);
-        if (!yt.results.length) return reply("No results found!");
-
-        const song = yt.results[0];
-        const apiUrl = `https://apis.davidcyriltech.my.id/youtube/mp3?url=${encodeURIComponent(song.url)}`;
+        let videoUrl = '';
+        let videoTitle = '';
+        let videoThumbnail = '';
         
-        const res = await fetch(apiUrl);
-        const data = await res.json();
-
-        if (!data?.result?.downloadUrl) return reply("Download failed. Try again later.");
-
-    await conn.sendMessage(from, {
-    audio: { url: data.result.downloadUrl },
-    mimetype: "audio/mpeg",
-    fileName: `${song.title}.mp3`,
-    contextInfo: {
-        externalAdReply: {
-            title: song.title.length > 25 ? `${song.title.substring(0, 22)}...` : song.title,
-            body: "Join our WhatsApp Channel",
-            mediaType: 1,
-            thumbnailUrl: song.thumbnail.replace('default.jpg', 'hqdefault.jpg'),
-            sourceUrl: 'https://whatsapp.com/channel/0029Vb5dDVO59PwTnL86j13J',
-            mediaUrl: 'https://whatsapp.com/channel/0029Vb5dDVO59PwTnL86j13J',
-            showAdAttribution: true,
-            renderLargerThumbnail: true
+        // Determine if input is a YouTube link
+        if (q.startsWith('http://') || q.startsWith('https://')) {
+            videoUrl = q;
+        } else {
+            // Search YouTube for the video
+            const { videos } = await yts(q);
+            if (!videos || videos.length === 0) {
+                return await reply("❌ No videos found!");
+            }
+            videoUrl = videos[0].url;
+            videoTitle = videos[0].title;
+            videoThumbnail = videos[0].thumbnail;
         }
-    }
-}, { quoted: mek });
+
+        // Send thumbnail immediately
+        try {
+            const ytId = (videoUrl.match(/(?:youtu\.be\/|v=)([a-zA-Z0-9_-]{11})/) || [])[1];
+            const thumb = videoThumbnail || (ytId ? `https://i.ytimg.com/vi/${ytId}/sddefault.jpg` : undefined);
+            const captionTitle = videoTitle || q;
+            if (thumb) {
+                await conn.sendMessage(from, {
+                    image: { url: thumb },
+                    caption: `*${captionTitle}*\nDownloading audio...` // Updated caption
+                }, { quoted: mek });
+            }
+        } catch (e) { 
+            console.error('[AUDIO] thumb error:', e?.message || e); // Updated log tag
+        }
+
+        // Validate YouTube URL
+        let urls = videoUrl.match(/(?:https?:\/\/)?(?:youtu\.be\/|(?:www\.|m\.)?youtube\.com\/(?:watch\?v=|v\/|embed\/|shorts\/|playlist\?list=)?)([a-zA-Z0-9_-]{11})/gi);
+        if (!urls) {
+            return await reply("❌ This is not a valid YouTube link!");
+        }
+
+        // Get Izumi API link for audio
+        // The key change is here: changing the 'format' parameter to 'mp3' or removing it if the API defaults to audio. 
+        // Based on the video code's structure, I'll assume 'mp3' is the appropriate format for audio.
+        const apiUrl = `${izumi.baseURL}/downloader/youtube?url=${encodeURIComponent(videoUrl)}&format=mp3`; // Changed format to 'mp3'
+        
+        const res = await axios.get(apiUrl, {
+            timeout: 30000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+        });
+
+        if (!res.data || !res.data.result || !res.data.result.download) {
+            return await reply("❌ Izumi API failed to return a valid audio link."); // Updated message
+        }
+
+        const audioData = res.data.result;
+
+        // Send audio directly using the download URL
+        await conn.sendMessage(from, {
+            audio: { url: audioData.download }, // Changed 'video' to 'audio'
+            mimetype: 'audio/mp4', // Using m4a (audio/mp4) or a general audio type
+            fileName: `${audioData.title || videoTitle || 'audio'}.mp3`, // Changed file extension
+            caption: `*${audioData.title || videoTitle || 'Audio'}*\n\n> *_THIS IS DARKZONE-MD baby_*` // Updated caption/title
+        }, { quoted: mek });
 
     } catch (error) {
-        console.error(error);
-        reply("An error occurred. Please try again.");
+        console.error('[AUDIO] Command Error:', error?.message || error); // Updated log tag
+        await reply("❌ Audio download failed: " + (error?.message || 'Unknown error')); // Updated message
     }
 });
