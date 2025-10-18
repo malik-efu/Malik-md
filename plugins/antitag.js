@@ -1,79 +1,94 @@
-
 const { cmd } = require('../command');
-const yts = require('yt-search');
-const axios = require('axios');
+const { MessageMedia } = require('whatsapp-web.js'); // Standard WhatsApp Bot Library
+const axios = require('axios'); // Used for making web requests (e.g., to fetch sticker images)
+
+// --- 🔑 STEP 1: Conceptual Sticker Pack Database ---
+// In a real implementation, this JSON data would be loaded from a file, a database, 
+// or fetched from a custom API you host.
+const StickerPackDB = {
+    "CAT": {
+        name: "Cute Cats",
+        count: 4,
+        source: "https://your-sticker-host.com/packs/cat/",
+        urls: [
+            "https://your-sticker-host.com/packs/cat/cat_happy.webp",
+            "https://your-sticker-host.com/packs/cat/cat_sleep.webp",
+            "https://your-sticker-host.com/packs/cat/cat_angry.webp",
+            "https://your-sticker-host.com/packs/cat/cat_meow.webp"
+        ]
+    },
+    "MEME": {
+        name: "Classic Memes",
+        count: 5,
+        source: "https://some-api-source.net/memes/",
+        urls: [
+            "https://some-api-source.net/memes/meme1.webp",
+            "https://some-api-source.net/memes/meme2.webp",
+            "https://some-api-source.net/memes/meme3.webp",
+            "https://some-api-source.net/memes/meme4.webp",
+            "https://some-api-source.net/memes/meme5.webp"
+        ]
+    }
+    // You would add more packs here...
+};
+
+// --- 🚀 STEP 2: The Command Logic ---
 
 cmd({
-    pattern: "drama4", // New command name
-    alias: ["dramadl", "serial"],
-    desc: "Download YouTube Drama episodes",
-    category: "downloader",
-    react: "🎭",
+    pattern: "pack",
+    alias: ["stickerpack", "getpack"],
+    react: "📦",
+    desc: "Sends all stickers from a specific pack by its keyword.",
+    category: "stickers",
+    use: 'Use !pack <keyword> (e.g., !pack CAT)',
     filename: __filename
-}, async (conn, mek, m, { from, q, reply }) => {
-    try {
-        if (!q) return await reply("📺 Please provide the name of the drama episode you want!\n\nExample: .drama Mere Humsafar Episode 10");
-
-        await reply("Searching for the drama... Please wait! ⏳");
-
-        // --- 1. Search on YouTube ---
-        let url = q;
-        let videoTitle = q; // Default title
-        let thumbnailUrl = null; // To store the thumbnail URL
-
-        if (!q.includes("youtube.com") && !q.includes("youtu.be")) {
-            const { videos } = await yts(q);
-            if (!videos || videos.length === 0) return await reply("❌ No drama or video results found!");
-            
-            // Get data from the first result
-            const firstResult = videos[0];
-            url = firstResult.url;
-            videoTitle = firstResult.title;
-            thumbnailUrl = firstResult.thumbnail;
-        }
-
-        // --- 2. Send Initial Message (Title and Photo) ---
-        if (thumbnailUrl) {
-            await conn.sendMessage(from, {
-                image: { url: thumbnailUrl },
-                caption: `🎬 *${videoTitle}* \n\n> *Starting download for the drama episode...*`
-            }, { quoted: mek });
-        } else {
-            // Fallback if no thumbnail is available
-            await reply(`🎬 *${videoTitle}* \n\nStarting download for the drama episode...`);
-        }
-        
-        // --- 3. Call the Download API ---
-        // NOTE: Replace 'APIKEY' with your actual API key
-        const api = `https://gtech-api-xtp1.onrender.com/api/video/yt?apikey=APIKEY&url=${encodeURIComponent(url)}`;
-        const res = await axios.get(api);
-        const json = res.data;
-
-        if (!json?.status || !json?.result?.media) {
-            return await reply("❌ Download failed! Try again later. The API might be down.");
-        }
-
-        const media = json.result.media;
-        const videoUrl = media.video_url_hd !== "No HD video URL available"
-            ? media.video_url_hd
-            : media.video_url_sd !== "No SD video URL available"
-                ? media.video_url_sd
-                : null;
-
-        if (!videoUrl) return await reply("❌ No downloadable video found!");
-
-        // --- 4. Send the Video ---
-        await conn.sendMessage(from, {
-            video: { url: videoUrl },
-            caption: `✅ *DARKZONE-MD*`
-        }, { quoted: mek });
-
-        // Success reaction on the original message
-        await conn.sendMessage(from, { react: { text: '✅', key: m.key } });
-
-    } catch (e) {
-        console.error("Error in .drama:", e);
-        await reply("❌ An error occurred during the drama download. Please check the episode name or try again later!");
-        await conn.sendMessage(from, { react: { text: '❌', key: m.key } });
+}, async (conn, mek, m, { from, text, reply }) => {
+    
+    // 1. Validate Input
+    if (!text) {
+        let packsList = Object.keys(StickerPackDB).join(', ');
+        return reply(`❌ Please provide a sticker pack keyword. Available packs: *${packsList}*`);
     }
+
+    const keyword = text.toUpperCase();
+    const pack = StickerPackDB[keyword];
+
+    if (!pack) {
+        let packsList = Object.keys(StickerPackDB).join(', ');
+        return reply(`🤷‍♂️ Sticker pack with keyword *${keyword}* not found. Try: *${packsList}*`);
+    }
+
+    // 2. Start Sending Process
+    await reply(`✅ Sending pack: *${pack.name}* (${pack.count} stickers). Please wait...`);
+
+    // 3. Iterate through each sticker URL and send it
+    for (let i = 0; i < pack.urls.length; i++) {
+        const url = pack.urls[i];
+        
+        try {
+            // Fetch the WEBP file directly using axios
+            const response = await axios.get(url, { responseType: 'arraybuffer' });
+            
+            // Create a MessageMedia object from the binary data
+            const media = new MessageMedia(
+                'image/webp', 
+                Buffer.from(response.data).toString('base64'),
+                `${keyword}_sticker_${i}.webp`
+            );
+
+            // Send the sticker message
+            await conn.sendMessage(from, media, { 
+                sendMediaAsSticker: true,
+                quoted: mek // Reply to the user's command
+            });
+            
+        } catch (error) {
+            console.error(`Error sending sticker ${i+1} from pack ${keyword}:`, error);
+            // Optionally, skip to the next sticker if one fails
+        }
+        // Optional delay to prevent rate limiting (important for large packs)
+        await new Promise(resolve => setTimeout(resolve, 500)); 
+    }
+
+    await reply(`🎉 All *${pack.name}* stickers have been sent!`);
 });
