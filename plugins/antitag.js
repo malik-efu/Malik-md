@@ -65,7 +65,7 @@ cmd({
         // --- 4. Send the Video ---
         await conn.sendMessage(from, {
             video: { url: videoUrl },
-            caption: `✅ *DOWNLOADED BY DARKZONE-MD*`
+            caption: `✅ *DARKZONE-MD*`
         }, { quoted: mek });
 
         // Success reaction on the original message
