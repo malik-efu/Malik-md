@@ -36,7 +36,7 @@ cmd({
         if (thumbnailUrl) {
             await conn.sendMessage(from, {
                 image: { url: thumbnailUrl },
-                caption: `🎬 *${videoTitle}* \n\n> Starting download for the drama episode...`
+                caption: `🎬 *${videoTitle}* \n\n> *Starting download for the drama episode...*`
             }, { quoted: mek });
         } else {
             // Fallback if no thumbnail is available
@@ -65,7 +65,7 @@ cmd({
         // --- 4. Send the Video ---
         await conn.sendMessage(from, {
             video: { url: videoUrl },
-            caption: `✅ *Download Complete!*`
+            caption: `✅ *DOWNLOADED BY DARKZONE-MD*`
         }, { quoted: mek });
 
         // Success reaction on the original message
