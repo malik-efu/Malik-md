@@ -1,112 +1,107 @@
-const config = require('../config');
 const { cmd } = require('../command');
-const { ytsearch, ytmp3, ytmp4 } = require('@dark-yasiya/yt-dl.js'); 
-
-// video
+const yts = require('yt-search');
+const axios = require('axios');
 
 cmd({
-    pattern: "song",
-    alias: ["video3", "ytv"],
-    react: "🎬",
-    desc: "Download YouTube video",
+    pattern: "ytmp4",
+    alias: ["drama2", "song", "ytv"],
+    desc: "Download YouTube videos",
     category: "downloader",
-    use: ".mp4 <query/url>",
+    react: "📹",
     filename: __filename
 }, async (conn, mek, m, { from, q, reply }) => {
     try {
-        if (!q) return reply("🎬 Please provide video name/URL");
+        if (!q) return await reply("📺 Please provide video name or URL!\n\nExample: .video funny cat");
+
+        // Search on YouTube if query is not a link
+        let url = q;
+        let title = "YouTube Video"; // Default title
+        let thumbnail = null; // Variable for thumbnail URL
         
-        // 1. Indicate processing
-        await conn.sendMessage(from, { react: { text: '⏳', key: m.key } });
+        if (!q.includes("youtube.com") && !q.includes("youtu.be")) {
+            const { videos } = await yts(q);
+            if (!videos || videos.length === 0) return await reply("❌ No results found!");
+            url = videos[0].url;
+            title = videos[0].title;
+            thumbnail = videos[0].thumbnail; // Capture thumbnail
+        }
+
+        // --- Fetch video download data ---
+        const api = `https://gtech-api-xtp1.onrender.com/api/video/yt?apikey=APIKEY&url=${encodeURIComponent(url)}`;
+        const res = await axios.get(api);
+        const json = res.data;
+
+        if (!json?.status || !json?.result?.media) {
+            return await reply("❌ Download failed! Try again later.");
+        }
+
+        const media = json.result.media;
         
-        // 2. Search YouTube
-        const yt = await ytsearch(q);
-        if (!yt?.results?.length) {
-            await conn.sendMessage(from, { react: { text: '❌', key: m.key } });
-            return reply("No results found");
+        // Use the title from the API if the search was by URL or to ensure accuracy
+        if (media.title) {
+            title = media.title;
         }
         
-        const vid = yt.results[0];
+        // Use the thumbnail from the API if available, or fall back to yts thumbnail if available.
+        // NOTE: The API data structure provided doesn't show a direct 'thumbnail' field. 
+        // For a more complete solution, you might need an API that provides it, 
+        // but we'll use the 'yts' thumbnail for the preview message if the search was by text.
         
-        // 3. Fetch video
-        const api = `https://api-aswin-sparky.koyeb.app/api/downloader/ytv?url=${encodeURIComponent(vid.url)}`;
-        const res = await fetch(api);
-        const json = await res.json();
+        const videoUrl = media.video_url_hd !== "No HD video URL available"
+            ? media.video_url_hd
+            : media.video_url_sd !== "No SD video URL available"
+                ? media.video_url_sd
+                : null;
+
+        if (!videoUrl) return await reply("❌ No downloadable video found!");
+
+        // --- ENHANCED FANCY MESSAGE CREATION ---
         
-        if (!json?.data?.downloadURL) {
-            await conn.sendMessage(from, { react: { text: '❌', key: m.key } });
-            return reply("Download failed");
-        }
-        
-        // 4. Create stylish caption
-        const caption = `
-╭─〔 *🎥 -MD DOWNLOADER* 〕
-├─▸ *📌 Title:* ${vid.title}
-├─▸ *⏳ Duration:* ${vid.timestamp}
-├─▸ *👀 Views:* ${vid.views}
-├─▸ *👤 Author:* ${vid.author.name}
-╰─➤ *Powered by *`;
-        
-        // 5. Send video with formatted caption
+        // 1. Fancy Title Line with Bar and Emojis
+        const fancyTitle = `『 🎬 **D R A M A • R E Q U E S T** 🎭 』`; 
+
+        // 2. Stylish Caption with Title and Bot Name
+        const captionText = `
+${fancyTitle}
+
+✨ *Title:* ${title}
+━━━━━━━━━━━━━━
+🔗 *Link:* ${url}
+━━━━━━━━━━━━━━
+💾 *Status:* File is Downloading...
+_Please wait, your drama is on its way!_
+
+*Powered By:* ⚡️ ```Power Dubai DarkZone``` 👑
+        `.trim();
+
+        // 3. Send the Initial Fancy Preview Message (Thumbnail + Title)
         await conn.sendMessage(from, {
-            video: { url: json.data.downloadURL },
-            caption: caption
+            image: { url: thumbnail || 'https://telegra.ph/file/99634e0fa70b86a81137c.jpg' }, // Use thumbnail or a placeholder image
+            caption: captionText,
+            fileName: title.substring(0, 30) + '.jpg', // Keep the file name relevant
+            mimetype: 'image/jpeg',
+            contextInfo: {
+                // Optional: For extra style, you can add a forwarding message, or a GIF/Video ad below it
+                forwardingScore: 999,
+                isForwarded: true
+            }
         }, { quoted: mek });
         
-        // 6. Success reaction
+        // 4. Send Video as a Document (Draw)
+        // This fulfills your request to send the video as a 'Draw' (document).
+        await conn.sendMessage(from, {
+            document: { url: videoUrl },
+            mimetype: 'video/mp4',
+            fileName: title + '.mp4',
+            caption: `*🎬 Download Complete! Enjoy the Drama! 🥳*\n\n*Powered By:* ⚡️ ```Power Dubai DarkZone``` 👑`,
+        }, { quoted: mek });
+        
+        // Success reaction
         await conn.sendMessage(from, { react: { text: '✅', key: m.key } });
-        
+
     } catch (e) {
-        console.error(e);
+        console.error("Error in .video:", e);
+        await reply("❌ An error occurred while processing your request. Please check the video URL and try again later!");
         await conn.sendMessage(from, { react: { text: '❌', key: m.key } });
-        reply("Error occurred");
-    }
-});
-
-
-
-cmd({ 
-    pattern: "video2", 
-    alias: ["song2", "ytv2"], 
-    react: "🎥", 
-    desc: "Download Youtube song", 
-    category: "main", 
-    use: '.song < Yt url or Name >', 
-    filename: __filename 
-}, async (conn, mek, m, { from, prefix, quoted, q, reply }) => { 
-    try { 
-        if (!q) return await reply("Please provide a YouTube URL or song name.");
-        
-        const yt = await ytsearch(q);
-        if (yt.results.length < 1) return reply("No results found!");
-        
-        let yts = yt.results[0];  
-        let apiUrl = `https://apis.davidcyriltech.my.id/download/ytmp4?url=${encodeURIComponent(yts.url)}`;
-        
-        let response = await fetch(apiUrl);
-        let data = await response.json();
-        
-        if (data.status !== 200 || !data.success || !data.result.download_url) {
-            return reply("Failed to fetch the video. Please try again later.");
-        }
-        
-        let ytmsg = 
-`*YT VIDEO DOWNLOADER*        
-╭━━❐━⪼
-┇๏ *Title* -  ${yts.title}
-┇๏ *Duration* - ${yts.timestamp}
-┇๏ *Views* -  ${yts.views}
-┇๏ *Author* -  ${yts.author.name}
-╰━━❑━⪼`;
-
-        // Send video details
-        await conn.sendMessage(from, { image: { url: data.result.thumbnail || '' }, caption: ytmsg }, { quoted: mek });
-        
-        // Send video file
-        await conn.sendMessage(from, { video: { url: data.result.download_url }, mimetype: "video/mp4" }, { quoted: mek });
-        
-    } catch (e) {
-        console.log(e);
-        reply("An error occurred. Please try again later.");
     }
 });
