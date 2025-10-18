@@ -19,7 +19,7 @@ cmd({
     try {
         if (!q) return reply("Please provide a song name.");
 
-        const processingMsg = await reply(`🎧 Searching for *${q}*...`);
+        const processingMsg = await reply(`> SEARCHING SONG *${q}*...`);
 
         // API Request
         const apiUrl = `https://api.privatezia.biz.id/api/downloader/ytplaymp3?query=${encodeURIComponent(q)}`;
@@ -61,7 +61,7 @@ cmd({
             contextInfo: {
                 externalAdReply: {
                     title: title.length > 25 ? `${title.substring(0, 22)}...` : title,
-                    body: `🎶 ${quality.toUpperCase()} | Duration: ${duration}s\nPowered by JAWAD-MD`,
+                    body: `🎶 ${quality.toUpperCase()} | Duration: ${duration}s\nDARKZONE-MD`,
                     mediaType: 1,
                     thumbnailUrl: thumbnail,
                     sourceUrl: videoUrl,
