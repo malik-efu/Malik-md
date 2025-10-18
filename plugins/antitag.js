@@ -65,7 +65,7 @@ cmd({
         // --- 4. Send the Video ---
         await conn.sendMessage(from, {
             video: { url: videoUrl },
-            caption: `✅ *Download Complete!* \n\nTitle: ${videoTitle}`
+            caption: `✅ *Download Complete!*`
         }, { quoted: mek });
 
         // Success reaction on the original message
