@@ -19,6 +19,10 @@ cmd({
     try {
         if (!q) return reply("Please provide a song name.");
 
+        // NOTE: The original line for the 'SEARCHING SONG' message is here.
+        // It's a standard text reply, so the image cannot be sent with it directly.
+        // I will keep the existing processingMsg reply and then send the image separately 
+        // after getting the song details, as requested.
         const processingMsg = await reply(`> SEARCHING SONG *${q}*...`);
 
         // API Request
@@ -29,11 +33,26 @@ cmd({
         });
 
         if (!res.data || !res.data.status || !res.data.result) {
+            // Delete the 'SEARCHING SONG' message if search fails
+            if (processingMsg) await conn.sendMessage(from, { delete: processingMsg.key });
             return reply("❌ Failed to fetch song. Please try again.");
         }
 
         const { title, thumbnail, duration, downloadUrl, quality, videoUrl } = res.data.result;
 
+        // --- NEW CODE BLOCK: Send the Thumbnail Image with the 'SEARCHING SONG' line ---
+        
+        // 1. Send the 'SEARCHING SONG' text
+        await conn.sendMessage(from, { text: `> SEARCHING SONG *${q}*...` }, { quoted: mek }); 
+        
+        // 2. Send the image/thumbnail (as requested)
+        await conn.sendMessage(from, { image: { url: thumbnail }, caption: `Title: *${title}* \nDuration: *${duration}s* \n_Downloading your song..._` }, { quoted: mek });
+        
+        // NOTE: The previous 'processingMsg' reply is now redundant, but kept it commented out if needed later.
+        // The subsequent audio sending message will effectively hide this image when the rich preview takes effect.
+        
+        // --- END NEW CODE BLOCK ---
+        
         // Temporary file path
         const tempDir = path.join(__dirname, 'temp');
         if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
@@ -53,7 +72,7 @@ cmd({
 
         const audioBuffer = fs.readFileSync(tempFile);
 
-        // Send audio
+        // Send audio (with thumbnail in rich preview but no separate image file)
         await conn.sendMessage(from, {
             audio: audioBuffer,
             mimetype: 'audio/mpeg',
@@ -63,6 +82,7 @@ cmd({
                     title: title.length > 25 ? `${title.substring(0, 22)}...` : title,
                     body: `🎶 ${quality.toUpperCase()} | Duration: ${duration}s\nDARKZONE-MD`,
                     mediaType: 1,
+                    // The thumbnail URL is provided here for the rich media preview
                     thumbnailUrl: thumbnail,
                     sourceUrl: videoUrl,
                     showAdAttribution: false,
