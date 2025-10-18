@@ -36,7 +36,7 @@ cmd({
         if (thumbnailUrl) {
             await conn.sendMessage(from, {
                 image: { url: thumbnailUrl },
-                caption: `🎬 *${videoTitle}* \n\nStarting download for the drama episode...`
+                caption: `🎬 *${videoTitle}* \n\n> Starting download for the drama episode...`
             }, { quoted: mek });
         } else {
             // Fallback if no thumbnail is available
