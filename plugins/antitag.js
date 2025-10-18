@@ -4,7 +4,7 @@ const yts = require('yt-search');
 const axios = require('axios');
 
 cmd({
-    pattern: "drama2", // New command name
+    pattern: "drama4", // New command name
     alias: ["dramadl", "serial"],
     desc: "Download YouTube Drama episodes",
     category: "downloader",
